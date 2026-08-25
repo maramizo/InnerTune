@@ -30,7 +30,7 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 - The active saved queue is outlined and marked **Playing**. Editing the current queue removes that source marker.
 - Closing the window hides it to the notification area; use the tray menu to exit.
 
-Library state is stored locally at `%LOCALAPPDATA%\InnerTune\library.json`.
+Library state is stored locally at `%LOCALAPPDATA%\InnerTune\library.json`. Frequently changing playback position is kept separately in the small `%LOCALAPPDATA%\InnerTune\playback.json`, so routine progress saves do not rewrite the library.
 
 Shared links contain the playlist name and playable track metadata only. They do not contain account data, local paths, favorites, listening history, or playback state.
 

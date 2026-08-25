@@ -54,6 +54,7 @@ public partial class MainWindow : Window
     private bool _applyingSettings;
     private bool _playbackRestoreComplete;
     private bool _playbackDirty;
+    private bool _libraryDirty;
     private bool _pointerOverNowPlaying;
     private bool _pointerOverMiniQueue;
     private bool _lyricsVisible;
@@ -230,8 +231,7 @@ public partial class MainWindow : Window
             SetStatus($"Downloading InnerTune {update.Version}…");
             var prepared = await _updates.DownloadAsync(update);
             SetStatus($"Installing InnerTune {update.Version}…");
-            CapturePlaybackState();
-            await _store.SaveAsync(_library);
+            await PersistPendingStateAsync();
             UpdateService.LaunchInstaller(prepared);
             _offeredUpdateTag = update.Tag;
         }
@@ -345,7 +345,23 @@ public partial class MainWindow : Window
         CapturePlaybackState();
         _ignoreFilesUntil = DateTime.UtcNow.AddMilliseconds(500);
         await _store.SaveAsync(_library);
+        _libraryDirty = false;
         BindLibrary();
+    }
+
+    private async Task PersistPendingStateAsync()
+    {
+        CapturePlaybackState();
+        if (_libraryDirty)
+        {
+            _ignoreFilesUntil = DateTime.UtcNow.AddMilliseconds(500);
+            await _store.SaveAsync(_library);
+            _libraryDirty = false;
+        }
+        else
+        {
+            await _store.SavePlaybackAsync(_library.Playback);
+        }
     }
 
     private void MarkQueueEdited()
@@ -411,8 +427,7 @@ public partial class MainWindow : Window
     private async Task PersistPlaybackStateAsync()
     {
         CapturePlaybackState();
-        _ignoreFilesUntil = DateTime.UtcNow.AddMilliseconds(500);
-        try { await _store.SaveAsync(_library); }
+        try { await _store.SavePlaybackAsync(_library.Playback); }
         catch (Exception e) { SetStatus(e.Message, true); }
     }
 
@@ -2025,6 +2040,7 @@ public partial class MainWindow : Window
         if (_videoActive && _videoUsesOwnAudio) VideoPlayer.Volume = AppRuntime.AudibleVolume(e.NewValue) / 100;
         if (!_settingsLoaded) return;
         _library.Volume = e.NewValue;
+        _libraryDirty = true;
         _volumeSaveTimer.Stop();
         _volumeSaveTimer.Start();
     }
@@ -2327,8 +2343,7 @@ public partial class MainWindow : Window
         _videoSearchCancel?.Cancel();
         if (_settingsLoaded)
         {
-            CapturePlaybackState();
-            try { await _store.SaveAsync(_library); } catch { }
+            try { await PersistPendingStateAsync(); } catch { }
         }
         if (_tray is not null) _tray.Visible = false;
         _tray?.Dispose();

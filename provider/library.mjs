@@ -10,7 +10,14 @@ const split = path => path.split(/[\\/]+/).map(x => x.trim()).filter(Boolean);
 
 export class LibraryStore {
   constructor(path = libraryPath()) { this.path = path; this.lock = `${path}.lock`; }
-  async read() { try { return {...empty(), ...JSON.parse(await readFile(this.path, 'utf8'))}; } catch (e) { if (e.code === 'ENOENT') return empty(); throw e; } }
+  async read() {
+    let data;
+    try { data = {...empty(), ...JSON.parse(await readFile(this.path, 'utf8'))}; }
+    catch (e) { if (e.code === 'ENOENT') data = empty(); else throw e; }
+    try { data.playback = JSON.parse(await readFile(join(dirname(this.path), 'playback.json'), 'utf8')); }
+    catch (e) { if (e.code !== 'ENOENT') throw e; }
+    return data;
+  }
   async update(change) { return this.withLock(async () => { const data = await this.read(); await change(data); data.updatedAt = now(); const temp = `${this.path}.${process.pid}.tmp`; await mkdir(dirname(this.path), {recursive: true}); await writeFile(temp, `${JSON.stringify(data, null, 2)}\n`); await rename(temp, this.path); return data; }); }
   async withLock(action) { await mkdir(dirname(this.lock), {recursive: true}); const deadline = Date.now() + 5000; for (;;) { try { await mkdir(this.lock); break; } catch (e) { if (e.code !== 'EEXIST') throw e; try { if (Date.now() - (await stat(this.lock)).mtimeMs > 30000) await rm(this.lock, {recursive: true}); } catch {} if (Date.now() > deadline) throw new Error('Music library is busy.'); await new Promise(r => setTimeout(r, 40)); } } try { return await action(); } finally { await rm(this.lock, {recursive: true, force: true}); } }
   ensureFolder(data, path) { let parentId = null, folder; for (const name of split(path)) { folder = data.folders.find(x => x.parentId === parentId && x.name.toLowerCase() === name.toLowerCase()); if (!folder) { folder = {id: randomUUID(), name, parentId, createdAt: now()}; data.folders.push(folder); } parentId = folder.id; } return folder; }

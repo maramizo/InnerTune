@@ -49,7 +49,34 @@ var measuredPeak = 0f;
 meter.StreamVolume += (_, eventArgs) => measuredPeak = Math.Max(measuredPeak, eventArgs.MaxSampleValues.Max());
 meter.Read(new float[24_000], 0, 24_000);
 var audioMeterWorks = measuredPeak > .65f;
-var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && tempoTrackingWorks && audioMeterWorks;
+var playbackRoot = Path.Combine(Path.GetTempPath(), $"InnerTunePlaybackStore-{Guid.NewGuid():N}");
+var playbackStoreWorks = false;
+try
+{
+    var store = new LibraryStore(playbackRoot);
+    var library = new LibraryData
+    {
+        Queue = [new Track { Id = "track", Title = "Track", Artist = "Artist" }],
+        Playback = new PlaybackSnapshot { Status = "playing", TrackId = "track", PositionSeconds = 12 }
+    };
+    await store.SaveAsync(library);
+    var libraryBefore = await File.ReadAllBytesAsync(store.FilePath);
+    var unchangedWriteTime = new DateTime(2020, 1, 2, 3, 4, 5, DateTimeKind.Utc);
+    File.SetLastWriteTimeUtc(store.FilePath, unchangedWriteTime);
+    library.Playback.PositionSeconds = 47;
+    await store.SavePlaybackAsync(library.Playback);
+    var libraryAfter = await File.ReadAllBytesAsync(store.FilePath);
+    var reloaded = await store.LoadAsync();
+    playbackStoreWorks = libraryBefore.SequenceEqual(libraryAfter) &&
+        File.GetLastWriteTimeUtc(store.FilePath) == unchangedWriteTime &&
+        File.Exists(store.PlaybackFilePath) &&
+        reloaded.Playback.PositionSeconds == 47;
+}
+finally
+{
+    if (Directory.Exists(playbackRoot)) Directory.Delete(playbackRoot, true);
+}
+var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && tempoTrackingWorks && audioMeterWorks && playbackStoreWorks;
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed,
@@ -63,6 +90,7 @@ Console.WriteLine(JsonSerializer.Serialize(new
     slowPhaseChanges = slowTempo.PhaseChanges,
     fastPhaseChanges = fastTempo.PhaseChanges,
     audioMeterWorks,
+    playbackStoreWorks,
     autoResumeDefault = new AppSettings().AutoResumeOnStart,
     optInResumesPlaying = optInResumesOnlyPlaying
 }));

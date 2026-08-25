@@ -15,8 +15,14 @@ public sealed class LibraryStore
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public string DataDirectory { get; } = AppRuntime.DataDirectory;
+    public LibraryStore(string? dataDirectory = null)
+    {
+        DataDirectory = Path.GetFullPath(string.IsNullOrWhiteSpace(dataDirectory) ? AppRuntime.DataDirectory : dataDirectory);
+    }
+
+    public string DataDirectory { get; }
     public string FilePath => Path.Combine(DataDirectory, "library.json");
+    public string PlaybackFilePath => Path.Combine(DataDirectory, "playback.json");
 
     public async Task<LibraryData> LoadAsync()
     {
@@ -28,7 +34,18 @@ public sealed class LibraryStore
     public async Task SaveAsync(LibraryData data)
     {
         await _gate.WaitAsync().ConfigureAwait(false);
-        try { await SaveUnlockedAsync(data).ConfigureAwait(false); }
+        try
+        {
+            await SaveUnlockedAsync(data).ConfigureAwait(false);
+            await SavePlaybackUnlockedAsync(data.Playback).ConfigureAwait(false);
+        }
+        finally { _gate.Release(); }
+    }
+
+    public async Task SavePlaybackAsync(PlaybackSnapshot playback)
+    {
+        await _gate.WaitAsync().ConfigureAwait(false);
+        try { await SavePlaybackUnlockedAsync(playback).ConfigureAwait(false); }
         finally { _gate.Release(); }
     }
 
@@ -42,14 +59,28 @@ public sealed class LibraryStore
     private async Task<LibraryData> LoadUnlockedAsync()
     {
         Directory.CreateDirectory(DataDirectory);
+        LibraryData data;
         if (!File.Exists(FilePath))
         {
-            var empty = new LibraryData();
-            await SaveUnlockedAsync(empty).ConfigureAwait(false);
-            return empty;
+            data = new LibraryData();
+            await SaveUnlockedAsync(data).ConfigureAwait(false);
         }
-        await using var stream = File.Open(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        return await JsonSerializer.DeserializeAsync<LibraryData>(stream, _json).ConfigureAwait(false) ?? new LibraryData();
+        else
+        {
+            await using var stream = File.Open(FilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            data = await JsonSerializer.DeserializeAsync<LibraryData>(stream, _json).ConfigureAwait(false) ?? new LibraryData();
+        }
+        if (File.Exists(PlaybackFilePath))
+        {
+            try
+            {
+                await using var playbackStream = File.Open(PlaybackFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                data.Playback = await JsonSerializer.DeserializeAsync<PlaybackSnapshot>(playbackStream, _json).ConfigureAwait(false) ?? data.Playback;
+            }
+            catch (JsonException) { }
+            catch (IOException) { }
+        }
+        return data;
     }
 
     private async Task SaveUnlockedAsync(LibraryData data)
@@ -59,5 +90,13 @@ public sealed class LibraryStore
         var temporary = FilePath + ".tmp";
         await using (var stream = File.Create(temporary)) await JsonSerializer.SerializeAsync(stream, data, _json).ConfigureAwait(false);
         File.Move(temporary, FilePath, true);
+    }
+
+    private async Task SavePlaybackUnlockedAsync(PlaybackSnapshot playback)
+    {
+        Directory.CreateDirectory(DataDirectory);
+        var temporary = PlaybackFilePath + ".tmp";
+        await using (var stream = File.Create(temporary)) await JsonSerializer.SerializeAsync(stream, playback, _json).ConfigureAwait(false);
+        File.Move(temporary, PlaybackFilePath, true);
     }
 }
