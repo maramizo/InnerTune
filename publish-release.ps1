@@ -44,8 +44,10 @@ $publishAssets = if ($useWslGh) {
     })
 } else { $assets }
 
-Invoke-GitHubCli @('release', 'view', $tag, '--repo', $Repository) *> $null
-if ($LASTEXITCODE -eq 0) {
+$releaseJson = Invoke-GitHubCli @('release', 'list', '--repo', $Repository, '--limit', '100', '--json', 'tagName')
+if ($LASTEXITCODE -ne 0) { throw 'Could not list existing GitHub releases.' }
+$releaseExists = @($releaseJson | ConvertFrom-Json | ForEach-Object { $_.tagName }) -contains $tag
+if ($releaseExists) {
     Invoke-GitHubCli (@('release', 'upload', $tag) + $publishAssets + @('--repo', $Repository, '--clobber'))
 }
 else {
