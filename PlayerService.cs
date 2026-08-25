@@ -38,7 +38,7 @@ public sealed class PlayerService : IDisposable
     public event EventHandler<string>? Failed;
     public event Action<float>? AudioLevelChanged;
     public event Action<string, double>? TempoEstimated;
-    public event Action<string, double, double>? MotionProfileEstimated;
+    public event Action<string, double, double, double>? MotionProfileEstimated;
     public Track? CurrentTrack => _currentTrack;
     public int CurrentIndex => _index;
     public bool IsPlaying => _playing;
@@ -364,7 +364,7 @@ public sealed class PlayerService : IDisposable
         if (_tempoCache.TryGetValue(trackId, out var cached))
         {
             TempoEstimated?.Invoke(trackId, cached.Bpm);
-            MotionProfileEstimated?.Invoke(trackId, cached.Danceability, cached.PeakLoudness);
+            MotionProfileEstimated?.Invoke(trackId, cached.Danceability, cached.FullnessFloor, cached.FullnessCeiling);
             return;
         }
         var cancellation = new CancellationTokenSource();
@@ -383,7 +383,7 @@ public sealed class PlayerService : IDisposable
             if (_currentTrack?.Id == trackId)
             {
                 TempoEstimated?.Invoke(trackId, analysis.Bpm);
-                MotionProfileEstimated?.Invoke(trackId, analysis.Danceability, analysis.PeakLoudness);
+                MotionProfileEstimated?.Invoke(trackId, analysis.Danceability, analysis.FullnessFloor, analysis.FullnessCeiling);
             }
         }
         catch (OperationCanceledException) { }

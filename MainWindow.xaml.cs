@@ -118,8 +118,8 @@ public partial class MainWindow : Window
         _player.Failed += (_, message) => Dispatcher.Invoke(() => SetStatus(message, true));
         _player.AudioLevelChanged += QueueAnimatedIconUpdate;
         _player.TempoEstimated += (trackId, bpm) => Dispatcher.BeginInvoke(() => ApplyEstimatedTempo(trackId, bpm));
-        _player.MotionProfileEstimated += (trackId, danceability, peakLoudness) =>
-            Dispatcher.BeginInvoke(() => ApplyMotionProfile(trackId, danceability, peakLoudness));
+        _player.MotionProfileEstimated += (trackId, danceability, fullnessFloor, fullnessCeiling) =>
+            Dispatcher.BeginInvoke(() => ApplyMotionProfile(trackId, danceability, fullnessFloor, fullnessCeiling));
         _agent.Activity += (_, activity) => Dispatcher.Invoke(() => AddAgentActivity(activity));
         ChatMessages.ItemsSource = _chat;
         VideoCandidateList.ItemsSource = _videoCandidates;
@@ -723,10 +723,10 @@ public partial class MainWindow : Window
         _djIconAnimator.SetTempo(bpm);
     }
 
-    private void ApplyMotionProfile(string trackId, double danceability, double peakLoudness)
+    private void ApplyMotionProfile(string trackId, double danceability, double fullnessFloor, double fullnessCeiling)
     {
         if (_player.CurrentTrack?.Id != trackId) return;
-        _djIconAnimator.SetMotionProfile(danceability, peakLoudness);
+        _djIconAnimator.SetMotionProfile(danceability, fullnessFloor, fullnessCeiling);
     }
 
     private void QueueAnimatedIconUpdate(float level) => _pendingAudioLevel = level;

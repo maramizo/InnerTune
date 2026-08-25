@@ -72,14 +72,19 @@ public static class ReactiveDjIconRenderer
 
     private static void DrawCat(DrawingContext drawing, double amplitude, double angle, bool jumping)
     {
-        // One paw works the deck while the other stays raised. During a jump,
-        // the airborne pose takes over and throws both paws overhead.
+        // One paw works the deck while the other stays raised. A jump begins
+        // from that grounded marker, then throws both paws overhead in the air
+        // and returns them to the alternating pose for a clean landing.
         var alternation = .5 + .5 * Math.Cos(angle);
         alternation = alternation * alternation * (3 - 2 * alternation);
-        var leftLift = jumping ? amplitude : amplitude * alternation;
-        var rightLift = jumping ? amplitude : amplitude * (1 - alternation);
-        var gesture = Math.Max(leftLift, rightLift);
+        var groundedLeftLift = amplitude * alternation;
+        var groundedRightLift = amplitude * (1 - alternation);
         var jump = jumping ? Math.Abs(Math.Sin(angle)) : 0;
+        var airborne = Math.Clamp(jump / .20, 0, 1);
+        airborne = airborne * airborne * (3 - 2 * airborne);
+        var leftLift = groundedLeftLift + (amplitude - groundedLeftLift) * airborne;
+        var rightLift = groundedRightLift + (amplitude - groundedRightLift) * airborne;
+        var gesture = Math.Max(leftLift, rightLift);
         // The resting cat sits into the deck; rave frames lift the whole body
         // far enough to read even at tray size without clipping the headset.
         var bob = 8 - 3 * gesture - 14 * jump;

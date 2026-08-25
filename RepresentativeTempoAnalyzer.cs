@@ -8,6 +8,8 @@ public sealed record TempoAnalysis(
     double SampleLoudness,
     double AverageLoudness,
     double PeakLoudness,
+    double FullnessFloor,
+    double FullnessCeiling,
     double Danceability,
     DanceMetrics DanceMetrics);
 
@@ -67,11 +69,13 @@ public static class RepresentativeTempoAnalyzer
             .ToArray();
         var loudness = new List<double>(centers.Length);
         var sampledPeaks = new List<double>(centers.Length);
+        var fullnessSamples = new List<float>();
         foreach (var center in centers)
         {
             var start = Math.Clamp(center - LoudnessWindowSeconds / 2, 0, Math.Max(0, duration - LoudnessWindowSeconds));
             reader.CurrentTime = TimeSpan.FromSeconds(start);
             var features = ReadEnvelope(samples, reader.WaveFormat, LoudnessWindowSeconds, token);
+            fullnessSamples.AddRange(features.Full);
             loudness.Add(features.Full.Count == 0 ? 0 : features.Full.Average(value => (double)value));
             sampledPeaks.Add(features.Full.Count == 0 ? 0 : features.Full.Max());
         }
@@ -90,6 +94,11 @@ public static class RepresentativeTempoAnalyzer
         }
         if (!tracker.HasEstimate) return null;
         var danceMetrics = MeasureDanceability(tempoFeatures.Full, tempoFeatures.Low, tracker.Bpm);
+        fullnessSamples.AddRange(tempoFeatures.Full);
+        var fullnessFloor = Percentile(fullnessSamples, .20);
+        var fullnessCeiling = Percentile(fullnessSamples, .95);
+        if (fullnessCeiling - fullnessFloor < .025)
+            fullnessCeiling = Math.Min(1, fullnessFloor + .025);
         var peakLoudness = Math.Max(
             sampledPeaks.Count == 0 ? 0 : sampledPeaks.Max(),
             tempoFeatures.Full.Count == 0 ? 0 : tempoFeatures.Full.Max());
@@ -99,6 +108,8 @@ public static class RepresentativeTempoAnalyzer
             loudness[selected],
             loudness.Average(),
             peakLoudness,
+            fullnessFloor,
+            fullnessCeiling,
             danceMetrics.Score,
             danceMetrics);
     }
@@ -201,6 +212,17 @@ public static class RepresentativeTempoAnalyzer
     {
         var position = Math.Clamp((value - low) / (high - low), 0, 1);
         return position * position * (3 - 2 * position);
+    }
+
+    private static double Percentile(IReadOnlyList<float> values, double percentile)
+    {
+        if (values.Count == 0) return 0;
+        var sorted = values.Select(value => (double)value).OrderBy(value => value).ToArray();
+        var position = Math.Clamp(percentile, 0, 1) * (sorted.Length - 1);
+        var lower = (int)Math.Floor(position);
+        var upper = Math.Min(sorted.Length - 1, lower + 1);
+        var fraction = position - lower;
+        return sorted[lower] + (sorted[upper] - sorted[lower]) * fraction;
     }
 
     private sealed record EnvelopeFeatures(List<float> Full, List<float> Low);

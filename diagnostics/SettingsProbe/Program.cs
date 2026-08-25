@@ -28,33 +28,66 @@ var phaseBeforeDelay = AudioIconAnimator.DecodePhase(catchUpAnimator.Update(.7f,
 catchUpAnimator.Update(.7f, true, true, .20);
 var phaseAfterDelay = AudioIconAnimator.DecodePhase(catchUpAnimator.Update(.7f, true, true, 1d / 30));
 var delayedTickCatchesUp = (phaseAfterDelay - phaseBeforeDelay + AudioIconAnimator.PhaseCount) % AudioIconAnimator.PhaseCount >= 4;
-var latchingAnimator = new AudioIconAnimator();
-latchingAnimator.SetTempo(120);
-latchingAnimator.SetMotionProfile(.92, .78);
+var strengthMarkerAnimator = new AudioIconAnimator();
+strengthMarkerAnimator.SetTempo(120);
+strengthMarkerAnimator.SetMotionProfile(.18, .04, .22);
 var priorLevel = 0;
-var priorJump = false;
 var sawLevelChange = false;
-var sawJump = false;
-var sawOffRestTransition = false;
+var strengthChangesUseMarkers = true;
 for (var sample = 0; sample < 360; sample++)
 {
-    var level = sample % 48 < 24 ? .95f : .03f;
-    var frame = latchingAnimator.Update(level, true, true, 1d / 30);
+    var level = sample % 30 < 15 ? .90f : .015f;
+    var frame = strengthMarkerAnimator.Update(level, true, true, 1d / 30);
     var frameLevel = AudioIconAnimator.DecodeLevel(frame);
-    var jumping = AudioIconAnimator.IsJumpFrame(frame);
-    if (frameLevel != priorLevel || jumping != priorJump)
+    if (frameLevel != priorLevel)
     {
-        sawLevelChange |= frameLevel != priorLevel;
-        sawJump |= jumping;
-        sawOffRestTransition |= !AudioIconAnimator.IsRestPhase(AudioIconAnimator.DecodePhase(frame));
+        sawLevelChange = true;
+        strengthChangesUseMarkers &= AudioIconAnimator.IsStrengthMarker(AudioIconAnimator.DecodePhase(frame));
     }
     priorLevel = frameLevel;
+}
+var jumpMarkerAnimator = new AudioIconAnimator();
+jumpMarkerAnimator.SetTempo(120);
+jumpMarkerAnimator.SetMotionProfile(.92, .08, .55);
+var priorJump = false;
+var sawJump = false;
+var sawJumpLanding = false;
+var jumpChangesUseMarkers = true;
+var jumpFrames = 0;
+var groundFrames = 0;
+var shortestCompletedJump = int.MaxValue;
+var shortestCompletedGroundDance = int.MaxValue;
+for (var sample = 0; sample < 330; sample++)
+{
+    var level = sample < 80 || sample >= 210 ? .95f : .01f;
+    var frame = jumpMarkerAnimator.Update(level, true, true, 1d / 30);
+    var jumping = AudioIconAnimator.IsJumpFrame(frame);
+    if (jumping != priorJump)
+    {
+        jumpChangesUseMarkers &= AudioIconAnimator.IsJumpMarker(AudioIconAnimator.DecodePhase(frame));
+        if (jumping)
+        {
+            if (sawJumpLanding)
+                shortestCompletedGroundDance = Math.Min(shortestCompletedGroundDance, groundFrames);
+            sawJump = true;
+            jumpFrames = 0;
+        }
+        else
+        {
+            sawJumpLanding = true;
+            shortestCompletedJump = Math.Min(shortestCompletedJump, jumpFrames);
+            groundFrames = 0;
+        }
+    }
+    if (jumping) jumpFrames++;
+    else groundFrames++;
     priorJump = jumping;
 }
-var immediateMotionTransitionsWork = sawLevelChange && sawJump && sawOffRestTransition;
+var choreographyMarkersWork = sawLevelChange && strengthChangesUseMarkers && sawJump && sawJumpLanding &&
+    jumpChangesUseMarkers && shortestCompletedJump >= 24 && shortestCompletedGroundDance >= 24;
 var offBeatJumpAnimator = new AudioIconAnimator();
 offBeatJumpAnimator.SetTempo(120);
-offBeatJumpAnimator.SetMotionProfile(1, .35);
+offBeatJumpAnimator.SetMotionProfile(1, .05, .35);
 var offBeatJumpFrame = 0;
 for (var sample = 0; sample <= 15; sample++)
     offBeatJumpFrame = offBeatJumpAnimator.Update(sample == 15 ? .001f : .95f, true, true, 1d / 30);
@@ -62,7 +95,7 @@ var offBeatLandingStillJumps = AudioIconAnimator.IsJumpFrame(offBeatJumpFrame) &
     AudioIconAnimator.IsRestPhase(AudioIconAnimator.DecodePhase(offBeatJumpFrame));
 var pianoAnimator = new AudioIconAnimator();
 pianoAnimator.SetTempo(120);
-pianoAnimator.SetMotionProfile(.18, .22);
+pianoAnimator.SetMotionProfile(.18, .04, .22);
 var pianoDoesNotJump = Enumerable.Range(0, 360)
     .Select(index => pianoAnimator.Update(index % 30 == 0 ? .9f : .15f, true, true, 1d / 30))
     .All(frame => !AudioIconAnimator.IsJumpFrame(frame));
@@ -229,22 +262,48 @@ foreach (var inspectedPath in args.Where(File.Exists))
             inspectedReader.WaveFormat.SampleRate * inspectedReader.WaveFormat.Channels / 30);
         var inspectedAnimator = new AudioIconAnimator();
         inspectedAnimator.SetTempo(inspectedAnalysis.Bpm);
-        inspectedAnimator.SetMotionProfile(inspectedAnalysis.Danceability, inspectedAnalysis.PeakLoudness);
+        inspectedAnimator.SetMotionProfile(inspectedAnalysis.Danceability,
+            inspectedAnalysis.FullnessFloor, inspectedAnalysis.FullnessCeiling);
         var inspectedFrames = 0;
         var inspectedJumpFrames = 0;
+        var inspectedMotionTransitions = 0;
+        var inspectedRunFrames = 0;
+        var inspectedShortestJumpRun = int.MaxValue;
+        var inspectedShortestGroundRun = int.MaxValue;
+        bool? inspectedPriorJump = null;
         inspectedMeter.LoudnessAvailable += loudness =>
         {
             var frame = inspectedAnimator.Update(loudness, true, true, 1d / 30);
+            var jumping = AudioIconAnimator.IsJumpFrame(frame);
+            if (inspectedPriorJump is { } priorJump && priorJump != jumping)
+            {
+                inspectedMotionTransitions++;
+                if (priorJump) inspectedShortestJumpRun = Math.Min(inspectedShortestJumpRun, inspectedRunFrames);
+                else inspectedShortestGroundRun = Math.Min(inspectedShortestGroundRun, inspectedRunFrames);
+                inspectedRunFrames = 0;
+            }
+            inspectedPriorJump = jumping;
+            inspectedRunFrames++;
             inspectedFrames++;
-            if (AudioIconAnimator.IsJumpFrame(frame)) inspectedJumpFrames++;
+            if (jumping) inspectedJumpFrames++;
         };
         var inspectedBuffer = new float[32_768];
         while (inspectedMeter.Read(inspectedBuffer, 0, inspectedBuffer.Length) > 0) { }
         inspectedJumpCoverage = inspectedFrames == 0 ? 0 : inspectedJumpFrames / (double)inspectedFrames;
+        inspectedTracks.Add(new
+        {
+            path = inspectedPath,
+            analysis = inspectedAnalysis,
+            jumpCoverage = inspectedJumpCoverage,
+            motionTransitions = inspectedMotionTransitions,
+            shortestJumpFrames = inspectedShortestJumpRun == int.MaxValue ? 0 : inspectedShortestJumpRun,
+            shortestGroundFrames = inspectedShortestGroundRun == int.MaxValue ? 0 : inspectedShortestGroundRun
+        });
+        continue;
     }
     inspectedTracks.Add(new { path = inspectedPath, analysis = inspectedAnalysis, jumpCoverage = inspectedJumpCoverage });
 }
-var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && delayedTickCatchesUp && immediateMotionTransitionsWork && offBeatLandingStillJumps && pianoDoesNotJump && raveClassificationWorks && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
+var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && delayedTickCatchesUp && choreographyMarkersWork && offBeatLandingStillJumps && pianoDoesNotJump && raveClassificationWorks && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed,
@@ -253,7 +312,9 @@ Console.WriteLine(JsonSerializer.Serialize(new
     animatedIconDefault = new AppSettings().AnimatedIconEnabled,
     audioIconLevelsWork = iconLevelsWork,
     delayedTickCatchesUp,
-    immediateMotionTransitionsWork,
+    choreographyMarkersWork,
+    shortestCompletedJump,
+    shortestCompletedGroundDance,
     offBeatLandingStillJumps,
     pianoDoesNotJump,
     raveClassificationWorks,

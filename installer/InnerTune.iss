@@ -7,7 +7,7 @@
 #endif
 
 #define AppName "InnerTune"
-#define AppVersion "1.1.22"
+#define AppVersion "1.1.23"
 #define AppPublisher "InnerTune"
 #define AppExeName "InnerTune.exe"
 

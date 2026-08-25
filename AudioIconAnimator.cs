@@ -6,16 +6,24 @@ public sealed class AudioIconAnimator
     public const int PhaseCount = 24;
     public const int JumpFrameOffset = 1 + (LevelCount - 1) * PhaseCount;
     public const int FrameCount = JumpFrameOffset + PhaseCount;
-    public const double JumpStartThreshold = .38;
-    public const double JumpStopThreshold = .22;
+    public const double JumpStartThreshold = .62;
+    public const double JumpStopThreshold = .44;
 
     private float _envelope;
     private float _reference = .08f;
     private double _phase;
     private double _bpm = BeatTempoTracker.DefaultBpm;
+    private int _activeAmplitudeLevel;
+    private int _pendingAmplitudeLevel;
+    private long _lastStrengthMarker = long.MinValue;
+    private long _lastJumpMarker = long.MinValue;
+    private long _jumpStartedMarker = long.MinValue;
+    private long _jumpEndedMarker = long.MinValue;
+    private bool _activeJump;
     private bool _jumpRequested;
     private float _sustainedLoudness;
-    private float _songMaximumLoudness = .08f;
+    private float _fullnessFloor = .04f;
+    private float _fullnessCeiling = .18f;
     private double _danceability;
 
     public double EstimatedBpm => _bpm;
@@ -38,25 +46,53 @@ public sealed class AudioIconAnimator
         var normalized = Math.Clamp(_envelope / _reference, 0, 1);
         var audible = Math.Clamp(input / .045f, 0, 1);
         var energy = Math.Clamp(MathF.Sqrt(normalized) * (.35f + .65f * audible), 0, 1);
-        var amplitudeLevel = input < .004f && _envelope < .012f
+        _pendingAmplitudeLevel = input < .004f && _envelope < .012f
             ? 0
             : Math.Clamp((int)MathF.Round(energy * (LevelCount - 1)), 1, LevelCount - 1);
 
         _sustainedLoudness += (input - _sustainedLoudness) * TimeAdjustedBlend(input > _sustainedLoudness ? .18 : .08, baselineTicks);
-        _songMaximumLoudness = Math.Max(_songMaximumLoudness, _sustainedLoudness);
-        var relativeLoudness = Math.Clamp(_sustainedLoudness / Math.Max(.04f, _songMaximumLoudness), 0, 1);
-        var absoluteGate = SmoothStep(.07, .18, _sustainedLoudness);
+        var fullnessRange = Math.Max(.025f, _fullnessCeiling - _fullnessFloor);
+        var relativeFullness = Math.Clamp((_sustainedLoudness - _fullnessFloor) / fullnessRange, 0, 1);
         var raveCharacter = SmoothStep(.42, .72, _danceability);
-        var raveEnergy = raveCharacter * Math.Pow(relativeLoudness, 2.2) * absoluteGate;
+        var raveEnergy = raveCharacter * Math.Pow(relativeFullness, 4.2);
         if (!_jumpRequested && raveEnergy >= JumpStartThreshold) _jumpRequested = true;
         else if (_jumpRequested && raveEnergy <= JumpStopThreshold) _jumpRequested = false;
 
-        var phase = (int)Math.Floor(_phase);
-        var frame = amplitudeLevel <= 0
+        var strengthMarker = (long)Math.Floor(_phase / (PhaseCount / 4d));
+        if (strengthMarker != _lastStrengthMarker)
+        {
+            // A hand-motion bank may change only at one of the four crossover
+            // markers in a full gesture. This keeps loudness reactive without
+            // moving a paw to a different path halfway through its stroke.
+            _activeAmplitudeLevel = _pendingAmplitudeLevel;
+            _lastStrengthMarker = strengthMarker;
+        }
+
+        var jumpMarker = (long)Math.Floor(_phase / (PhaseCount / 2d));
+        if (jumpMarker != _lastJumpMarker)
+        {
+            var enterJump = !_activeJump && _jumpRequested &&
+                (_jumpEndedMarker == long.MinValue || jumpMarker - _jumpEndedMarker >= 2);
+            var leaveJump = _activeJump && !_jumpRequested &&
+                jumpMarker - _jumpStartedMarker >= 2;
+            if (enterJump || leaveJump)
+            {
+                // A delayed Windows tick can cross a marker. Render the actual
+                // takeoff/landing pose once instead of changing clips in midair.
+                _phase = jumpMarker * (PhaseCount / 2d);
+                _activeJump = enterJump;
+                if (enterJump) _jumpStartedMarker = jumpMarker;
+                else _jumpEndedMarker = jumpMarker;
+            }
+            _lastJumpMarker = jumpMarker;
+        }
+
+        var phase = (int)Math.Floor(_phase % PhaseCount);
+        var frame = _activeAmplitudeLevel <= 0
             ? 0
-            : _jumpRequested
+            : _activeJump
                 ? EncodeJump(phase)
-                : Encode(amplitudeLevel, phase);
+                : Encode(_activeAmplitudeLevel, phase);
 
         // One complete gesture spans two beats. Twenty-four poses at the
         // player's 30 Hz meter rate keep motion fluid while still making
@@ -65,7 +101,7 @@ public sealed class AudioIconAnimator
         // finishes), catch up to musical time instead of replaying stale poses
         // in slow motion.
         var phaseAdvance = elapsed * _bpm / 60 * PhaseCount / 2;
-        _phase = (_phase + phaseAdvance) % PhaseCount;
+        _phase += phaseAdvance;
         return frame;
     }
 
@@ -75,10 +111,11 @@ public sealed class AudioIconAnimator
         HasTempoEstimate = true;
     }
 
-    public void SetMotionProfile(double danceability, double peakLoudness)
+    public void SetMotionProfile(double danceability, double fullnessFloor, double fullnessCeiling)
     {
         _danceability = Math.Clamp(danceability, 0, 1);
-        _songMaximumLoudness = Math.Max(_songMaximumLoudness, (float)Math.Clamp(peakLoudness, .04, 1));
+        _fullnessFloor = (float)Math.Clamp(fullnessFloor, 0, .95);
+        _fullnessCeiling = (float)Math.Clamp(fullnessCeiling, _fullnessFloor + .025f, 1);
     }
 
     public void Reset()
@@ -86,6 +123,13 @@ public sealed class AudioIconAnimator
         _envelope = 0;
         _reference = .08f;
         _phase = 0;
+        _activeAmplitudeLevel = 0;
+        _pendingAmplitudeLevel = 0;
+        _lastStrengthMarker = long.MinValue;
+        _lastJumpMarker = long.MinValue;
+        _jumpStartedMarker = long.MinValue;
+        _jumpEndedMarker = long.MinValue;
+        _activeJump = false;
         _jumpRequested = false;
         _sustainedLoudness = 0;
     }
@@ -94,7 +138,8 @@ public sealed class AudioIconAnimator
     {
         Reset();
         _bpm = BeatTempoTracker.DefaultBpm;
-        _songMaximumLoudness = .08f;
+        _fullnessFloor = .04f;
+        _fullnessCeiling = .18f;
         _danceability = 0;
         HasTempoEstimate = false;
     }
@@ -122,6 +167,10 @@ public sealed class AudioIconAnimator
             : (frame - 1) / PhaseCount + 1;
 
     public static bool IsRestPhase(int phase) => phase == 0 || phase == PhaseCount / 2;
+
+    public static bool IsStrengthMarker(int phase) => phase % (PhaseCount / 4) == 0;
+
+    public static bool IsJumpMarker(int phase) => phase % (PhaseCount / 2) == 0;
 
     private static double SmoothStep(double low, double high, double value)
     {
