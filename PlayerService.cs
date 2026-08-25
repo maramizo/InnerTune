@@ -25,7 +25,7 @@ public sealed class PlayerService : IDisposable
     private float _volume = .72f;
     private TimeSpan _pendingPosition;
     private CancellationTokenSource? _loadCancel;
-    private readonly Stack<int> _shuffleHistory = [];
+    private readonly ShuffleNavigator _shuffle = new();
     private bool _shuffleEnabled;
 
     public event EventHandler? StateChanged;
@@ -37,7 +37,14 @@ public sealed class PlayerService : IDisposable
     public bool ShuffleEnabled
     {
         get => _shuffleEnabled;
-        set { if (_shuffleEnabled == value) return; _shuffleEnabled = value; _shuffleHistory.Clear(); StateChanged?.Invoke(this, EventArgs.Empty); }
+        set
+        {
+            if (_shuffleEnabled == value) return;
+            _shuffleEnabled = value;
+            if (value) _shuffle.Reset(_queue.Count, _index);
+            else _shuffle.Clear();
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
     public PlaybackRepeatMode RepeatMode { get; set; }
     public TimeSpan Position => _reader?.CurrentTime ?? _pendingPosition;
@@ -63,7 +70,7 @@ public sealed class PlayerService : IDisposable
     public void SetQueue(IReadOnlyList<Track> queue)
     {
         var queueIds = queue.Select(track => track.Id).ToArray();
-        if (!_queueIds.SequenceEqual(queueIds)) _shuffleHistory.Clear();
+        var changed = !_queueIds.SequenceEqual(queueIds);
         _queueIds = queueIds;
         _queue = queue;
         if (_currentTrack is not null)
@@ -71,12 +78,14 @@ public sealed class PlayerService : IDisposable
             var newIndex = queue.ToList().FindIndex(track => track.Id == _currentTrack.Id);
             _index = newIndex;
         }
+        if (changed && ShuffleEnabled) _shuffle.Reset(_queue.Count, _index);
     }
 
     public Task PlayAsync(int index)
     {
         if (index < 0 || index >= _queue.Count) return Task.CompletedTask;
-        _shuffleHistory.Clear();
+        if (ShuffleEnabled) _shuffle.Reset(_queue.Count, index);
+        else _shuffle.Clear();
         return StartTrackAsync(_queue[index], index, TimeSpan.Zero);
     }
 
@@ -89,10 +98,15 @@ public sealed class PlayerService : IDisposable
         _pendingPosition = ClampPosition(position, track.DurationSeconds);
         _playing = false;
         IsLoading = false;
+        if (ShuffleEnabled) _shuffle.Reset(_queue.Count, index);
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    public Task RestorePlayingAsync(Track track, int index, TimeSpan position) => StartTrackAsync(track, index, position);
+    public Task RestorePlayingAsync(Track track, int index, TimeSpan position)
+    {
+        if (ShuffleEnabled) _shuffle.Reset(_queue.Count, index);
+        return StartTrackAsync(track, index, position);
+    }
 
     private async Task StartTrackAsync(Track track, int index, TimeSpan startPosition)
     {
@@ -167,14 +181,17 @@ public sealed class PlayerService : IDisposable
             await StartTrackAsync(_queue[current], current, TimeSpan.Zero);
             return;
         }
-        if (automatic && RepeatMode == PlaybackRepeatMode.Off && current == _queue.Count - 1) return;
         int next;
-        if (ShuffleEnabled && _queue.Count > 1)
+        if (ShuffleEnabled)
         {
-            do next = Random.Shared.Next(_queue.Count); while (next == current);
-            if (current >= 0) _shuffleHistory.Push(current);
+            var allowNewCycle = !automatic || RepeatMode == PlaybackRepeatMode.All;
+            if (!_shuffle.TryNext(_queue.Count, current, allowNewCycle, out next)) return;
         }
-        else next = (current + 1 + _queue.Count) % _queue.Count;
+        else
+        {
+            if (automatic && RepeatMode == PlaybackRepeatMode.Off && current == _queue.Count - 1) return;
+            next = (current + 1 + _queue.Count) % _queue.Count;
+        }
         await StartTrackAsync(_queue[next], next, TimeSpan.Zero);
     }
 
@@ -183,7 +200,7 @@ public sealed class PlayerService : IDisposable
         if (Position.TotalSeconds > 4) { Seek(0); return; }
         if (_queue.Count == 0) return;
         var current = _currentTrack is null ? -1 : _queue.ToList().FindIndex(track => track.Id == _currentTrack.Id);
-        var previous = ShuffleEnabled && _shuffleHistory.TryPop(out var shuffled)
+        var previous = ShuffleEnabled && _shuffle.TryPrevious(_queue.Count, current, out var shuffled)
             ? shuffled
             : current < 0 ? _queue.Count - 1 : (current - 1 + _queue.Count) % _queue.Count;
         await StartTrackAsync(_queue[previous], previous, TimeSpan.Zero);

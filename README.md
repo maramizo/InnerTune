@@ -24,6 +24,8 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 - **Share** copies a compact `innertune://playlist/...` link. Opening the link in Windows previews and saves the named playlist without replacing the current queue; **Import link** under Saved queues is available for manual pasting.
 - Press `:` outside a text field to open Luna. Search appears again only when you select Search.
 - Use **Mini player** for the compact always-on-top widget.
+- Hover InnerTune on the Windows taskbar for Previous, Play/Pause, and Next; the taskbar icon also shows playback progress.
+- Windows media keys and system media controls show the current title, artist, album, artwork, timeline, and transport controls.
 - Closing the window hides it to the notification area; use the tray menu to exit.
 
 Library state is stored locally at `%LOCALAPPDATA%\InnerTune\library.json`.
@@ -44,6 +46,14 @@ Run the smart-video integration test with:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\diagnostics\test-smart-video.ps1
+```
+
+Capture the responsive mini player through WPF's off-screen renderer with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\diagnostics\capture-mini-hidden.ps1 `
+  -ApplicationPath "$env:LOCALAPPDATA\Programs\InnerTune\InnerTune.exe" `
+  -LibraryPath "$env:LOCALAPPDATA\InnerTune\library.json"
 ```
 
 The harness attaches through UI Automation without moving the physical mouse. It leaves an already-running InnerTune process alone and deletes its disposable data when finished. Add `-KeepTestData` when diagnosing a failure.

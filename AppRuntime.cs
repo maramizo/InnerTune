@@ -11,6 +11,7 @@ public static class AppRuntime
     public const string TestInstanceVariable = "INNERTUNE_TEST_INSTANCE";
     public const string DataDirectoryVariable = "ITMUSIC_DATA_DIR";
     public const string TestShareActivation = "test:share-current";
+    public const string TestCaptureDirectoryVariable = "INNERTUNE_TEST_CAPTURE_DIR";
 
     public static bool IsTestMode { get; } =
         string.Equals(Environment.GetEnvironmentVariable(TestModeVariable), "1", StringComparison.OrdinalIgnoreCase);

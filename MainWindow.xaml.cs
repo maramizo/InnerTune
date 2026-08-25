@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<ChatMessage> _chat = [];
     private readonly ObservableCollection<VideoCandidate> _videoCandidates = [];
     private readonly PlayerService _player;
+    private WindowsMediaIntegration? _windowsMedia;
     private readonly DispatcherTimer _fileDebounce = new() { Interval = TimeSpan.FromMilliseconds(180) };
     private readonly DispatcherTimer _volumeSaveTimer = new() { Interval = TimeSpan.FromMilliseconds(450) };
     private readonly DispatcherTimer _playbackSaveTimer = new() { Interval = TimeSpan.FromSeconds(10) };
@@ -78,6 +79,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _lyrics = new LyricsService(_store.DataDirectory);
         _player = new PlayerService(_provider);
+        SourceInitialized += (_, _) => InitializeWindowsMedia();
         _player.StateChanged += (_, _) => Dispatcher.Invoke(() => { UpdatePlayerUi(); MarkPlaybackDirty(); });
         _player.Failed += (_, message) => Dispatcher.Invoke(() => SetStatus(message, true));
         _agent.Activity += (_, activity) => Dispatcher.Invoke(() => AddAgentActivity(activity));
@@ -127,6 +129,8 @@ public partial class MainWindow : Window
         MarkPlaybackDirty();
         _playbackSaveTimer.Start();
         SetMode("home");
+        if (AppRuntime.IsTestMode && Environment.GetEnvironmentVariable(AppRuntime.TestCaptureDirectoryVariable) is { Length: > 0 } captureDirectory)
+            _ = CaptureMiniLayoutsAsync(captureDirectory);
         if (_pendingActivation is { } activation)
         {
             _pendingActivation = null;
@@ -467,7 +471,9 @@ public partial class MainWindow : Window
         }
         if (PlaybackIsLoading)
         {
-            PlayGlyph.Text = "\uE895";
+            PlayIcon.Visibility = Visibility.Collapsed;
+            PauseIcon.Visibility = Visibility.Collapsed;
+            LoadingIcon.Visibility = Visibility.Visible;
             if (!_spinnerActive)
             {
                 _spinnerActive = true;
@@ -483,7 +489,9 @@ public partial class MainWindow : Window
                 PlayGlyphRotation.Angle = 0;
                 _spinnerActive = false;
             }
-            PlayGlyph.Text = PlaybackIsPlaying ? "\uE769" : "\uE768";
+            LoadingIcon.Visibility = Visibility.Collapsed;
+            PlayIcon.Visibility = PlaybackIsPlaying ? Visibility.Collapsed : Visibility.Visible;
+            PauseIcon.Visibility = PlaybackIsPlaying ? Visibility.Visible : Visibility.Collapsed;
         }
         var duration = PlaybackDuration.TotalSeconds;
         SeekSlider.Maximum = Math.Max(1, duration);
@@ -502,6 +510,35 @@ public partial class MainWindow : Window
         UpdatePlaybackModeButtons();
         UpdateLyricsPosition();
         SynchronizeVideoWithAudio(track);
+        UpdateWindowsMedia();
+    }
+
+    private void InitializeWindowsMedia()
+    {
+        if (AppRuntime.IsTestMode) return;
+        try
+        {
+            _windowsMedia = new WindowsMediaIntegration(
+                this,
+                TogglePlayback,
+                () => _ = PreviousPlaybackAsync(),
+                () => _ = NextPlaybackAsync(),
+                SeekPlayback);
+            UpdateWindowsMedia();
+        }
+        catch (Exception error) { AppRuntime.TestLog($"Windows media integration failed: {error}"); }
+    }
+
+    private void UpdateWindowsMedia()
+    {
+        _windowsMedia?.Update(new WindowsMediaState(
+            _player.CurrentTrack,
+            PlaybackIsPlaying,
+            PlaybackIsLoading,
+            PlaybackPosition,
+            PlaybackDuration,
+            _player.CurrentTrack is not null,
+            _library.Queue.Count > 1));
     }
 
     private bool PlaybackIsPlaying => _videoActive && _videoUsesOwnAudio ? _videoPlaying : _player.IsPlaying;
@@ -883,7 +920,7 @@ public partial class MainWindow : Window
         ShuffleButton.Foreground = _player.ShuffleEnabled ? accent : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(143, 139, 151));
         ShuffleButton.ToolTip = _player.ShuffleEnabled ? "Shuffle on" : "Shuffle off";
         RepeatButton.Foreground = _player.RepeatMode == PlaybackRepeatMode.Off ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(143, 139, 151)) : accent;
-        RepeatButton.Content = _player.RepeatMode == PlaybackRepeatMode.One ? "\uE8ED" : "\uE8EE";
+        RepeatOneBadge.Visibility = _player.RepeatMode == PlaybackRepeatMode.One ? Visibility.Visible : Visibility.Collapsed;
         RepeatButton.ToolTip = _player.RepeatMode switch { PlaybackRepeatMode.One => "Repeat this song", PlaybackRepeatMode.All => "Repeat queue", _ => "Repeat off" };
     }
 
@@ -1714,11 +1751,22 @@ public partial class MainWindow : Window
             TransportColumn.Width = new GridLength(3, GridUnitType.Star);
             UtilityColumn.Width = new GridLength(2.2, GridUnitType.Star);
             NowPlayingSection.Margin = new Thickness(18, 10, 18, 10);
+            ArtworkRow.Height = new GridLength(1, GridUnitType.Star);
+            NowTextRow.Height = new GridLength(0);
             ArtworkColumn.Width = new GridLength(62);
+            NowTextColumn.Width = new GridLength(1, GridUnitType.Star);
+            Grid.SetRow(ArtworkFrame, 0); Grid.SetColumn(ArtworkFrame, 0);
+            Grid.SetRow(NowTextPanel, 0); Grid.SetColumn(NowTextPanel, 1);
             ArtworkFrame.Visibility = Visibility.Visible;
             ArtworkFrame.Width = ArtworkFrame.Height = 58;
+            ArtworkFrame.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
             NowTextPanel.Margin = new Thickness(12, 0, 8, 0);
+            NowTextPanel.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
             NowTitle.FontSize = 13;
+            NowTitle.TextAlignment = TextAlignment.Left;
+            NowArtist.TextAlignment = TextAlignment.Left;
+            NowArtist.FontSize = 10;
+            NowArtist.Margin = new Thickness(0, 4, 0, 0);
             NowArtist.Visibility = Visibility.Visible;
             TransportSection.Margin = new Thickness(8, 0, 8, 0);
             ShuffleButton.Visibility = Visibility.Visible;
@@ -1749,20 +1797,30 @@ public partial class MainWindow : Window
         }
 
         var width = ActualWidth > 0 ? ActualWidth : Width;
-        var albumWidth = width >= 680 ? 190 : width >= 520 ? 170 : width >= 380 ? 136 : 90;
-        var showArtwork = width >= 380;
+        var albumWidth = width >= 680 ? 124 : width >= 520 ? 112 : width >= 380 ? 100 : 94;
         var showTimes = width >= 520;
 
         NowPlayingColumn.Width = new GridLength(albumWidth);
         TransportColumn.Width = new GridLength(1, GridUnitType.Star);
         UtilityColumn.Width = new GridLength(54);
-        NowPlayingSection.Margin = new Thickness(6, 10, 3, 10);
+        NowPlayingSection.Margin = new Thickness(5, 4, 3, 4);
 
-        ArtworkFrame.Visibility = showArtwork ? Visibility.Visible : Visibility.Collapsed;
-        ArtworkColumn.Width = new GridLength(showArtwork ? width >= 520 ? 48 : 43 : 0);
-        ArtworkFrame.Width = ArtworkFrame.Height = width >= 520 ? 44 : 39;
-        NowTextPanel.Margin = new Thickness(showArtwork ? 7 : 3, 0, 3, 0);
-        NowTitle.FontSize = width >= 520 ? 12 : 11;
+        ArtworkRow.Height = new GridLength(width >= 520 ? 46 : 41);
+        NowTextRow.Height = new GridLength(1, GridUnitType.Star);
+        ArtworkColumn.Width = new GridLength(1, GridUnitType.Star);
+        NowTextColumn.Width = new GridLength(0);
+        Grid.SetRow(ArtworkFrame, 0); Grid.SetColumn(ArtworkFrame, 0);
+        Grid.SetRow(NowTextPanel, 1); Grid.SetColumn(NowTextPanel, 0);
+        ArtworkFrame.Visibility = Visibility.Visible;
+        ArtworkFrame.Width = ArtworkFrame.Height = width >= 520 ? 42 : 37;
+        ArtworkFrame.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
+        NowTextPanel.Margin = new Thickness(2, 2, 2, 0);
+        NowTextPanel.HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch;
+        NowTitle.FontSize = width >= 520 ? 10 : 9.5;
+        NowTitle.TextAlignment = TextAlignment.Center;
+        NowArtist.TextAlignment = TextAlignment.Center;
+        NowArtist.FontSize = width >= 520 ? 8.5 : 8;
+        NowArtist.Margin = new Thickness(0, 1, 0, 0);
         NowArtist.Visibility = Visibility.Visible;
 
         TransportSection.Margin = new Thickness(0);
@@ -1791,6 +1849,36 @@ public partial class MainWindow : Window
         WatchVideoButton.Margin = new Thickness(1, 0, 0, 0);
         ExpandButton.Margin = new Thickness(1, 0, 0, 0);
         MiniQueueSurface.Width = Math.Clamp(width - 16, 288, 380);
+    }
+
+    private async Task CaptureMiniLayoutsAsync(string outputDirectory)
+    {
+        try
+        {
+            if (!_mini) ToggleMini();
+            Directory.CreateDirectory(outputDirectory);
+            foreach (var width in new[] { 720, 560, 440, 320 })
+            {
+                Width = width;
+                Height = 98;
+                UpdateLayout();
+                await Dispatcher.Yield(DispatcherPriority.Render);
+                var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+                var bitmap = new RenderTargetBitmap(
+                    Math.Max(1, (int)Math.Ceiling(ActualWidth * dpi.DpiScaleX)),
+                    Math.Max(1, (int)Math.Ceiling(ActualHeight * dpi.DpiScaleY)),
+                    96 * dpi.DpiScaleX,
+                    96 * dpi.DpiScaleY,
+                    System.Windows.Media.PixelFormats.Pbgra32);
+                bitmap.Render(this);
+                var encoder = new PngBitmapEncoder();
+                encoder.Frames.Add(BitmapFrame.Create(bitmap));
+                await using var output = File.Create(Path.Combine(outputDirectory, $"mini-{width}.png"));
+                encoder.Save(output);
+            }
+            AppRuntime.TestLog($"captured mini layouts to {outputDirectory}");
+        }
+        catch (Exception error) { AppRuntime.TestLog($"mini capture failed: {error}"); }
     }
 
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (e.ClickCount == 2) WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; else DragMove(); }
@@ -1855,6 +1943,8 @@ public partial class MainWindow : Window
         try { VideoPlayer.Stop(); VideoPlayer.Source = null; } catch { }
         _discoveryProvider.Dispose();
         _updates.Dispose();
+        _windowsMedia?.Dispose();
+        _windowsMedia = null;
         _player.Dispose();
         System.Windows.Application.Current.Shutdown();
     }

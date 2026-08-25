@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
     <UseWPF>true</UseWPF>
     <UseWindowsForms>true</UseWindowsForms>
     <Nullable>enable</Nullable>
@@ -10,7 +11,7 @@
     <AssemblyName>InnerTune</AssemblyName>
     <RootNamespace>InnerTune</RootNamespace>
     <ApplicationIcon>Assets\InnerTune.ico</ApplicationIcon>
-    <Version>1.1.6</Version>
+    <Version>1.1.7</Version>
     <Authors>InnerTune</Authors>
     <Product>InnerTune</Product>
     <Description>A lightweight Windows music player powered by InnerTube.</Description>
