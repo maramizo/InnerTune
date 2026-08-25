@@ -20,22 +20,25 @@ public sealed record AppUpdate(
 public sealed class UpdateService : IDisposable
 {
     public const string Repository = "maramizo/InnerTune";
-    private readonly HttpClient _client = new() { Timeout = TimeSpan.FromSeconds(30) };
-    public Version CurrentVersion { get; } = Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0);
+    private readonly HttpClient _client = new() { Timeout = Timeout.InfiniteTimeSpan };
+    public Version CurrentVersion { get; }
 
-    public UpdateService()
+    public UpdateService(Version? currentVersion = null)
     {
+        CurrentVersion = currentVersion ?? Assembly.GetExecutingAssembly().GetName().Version ?? new Version(0, 0);
         _client.DefaultRequestHeaders.UserAgent.ParseAdd($"InnerTune/{CurrentVersion}");
         _client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
     }
 
     public async Task<AppUpdate?> CheckAsync(CancellationToken token = default)
     {
-        using var response = await _client.GetAsync($"https://api.github.com/repos/{Repository}/releases/latest", token);
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        timeout.CancelAfter(TimeSpan.FromSeconds(30));
+        using var response = await _client.GetAsync($"https://api.github.com/repos/{Repository}/releases/latest", timeout.Token);
         if (response.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
         response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(token);
-        var release = await JsonSerializer.DeserializeAsync<GitHubRelease>(stream, cancellationToken: token)
+        await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+        var release = await JsonSerializer.DeserializeAsync<GitHubRelease>(stream, cancellationToken: timeout.Token)
             ?? throw new InvalidOperationException("GitHub returned an invalid release response.");
         if (!TryVersion(release.TagName, out var version) || version <= CurrentVersion) return null;
 
@@ -55,7 +58,9 @@ public sealed class UpdateService : IDisposable
         var name = Path.GetFileName(new Uri(update.InstallerUrl).AbsolutePath);
         var destination = Path.Combine(directory, name);
         var temporary = destination + ".download";
-        var expected = (await _client.GetStringAsync(update.ChecksumUrl, token))
+        using var checksumTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+        checksumTimeout.CancelAfter(TimeSpan.FromSeconds(30));
+        var expected = (await _client.GetStringAsync(update.ChecksumUrl, checksumTimeout.Token))
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault();
         if (expected is null || expected.Length != 64 || !expected.All(Uri.IsHexDigit))
@@ -63,11 +68,13 @@ public sealed class UpdateService : IDisposable
 
         if (!File.Exists(destination) || !HashMatches(destination, expected))
         {
-            using var response = await _client.GetAsync(update.InstallerUrl, HttpCompletionOption.ResponseHeadersRead, token);
+            using var downloadTimeout = CancellationTokenSource.CreateLinkedTokenSource(token);
+            downloadTimeout.CancelAfter(TimeSpan.FromMinutes(15));
+            using var response = await _client.GetAsync(update.InstallerUrl, HttpCompletionOption.ResponseHeadersRead, downloadTimeout.Token);
             response.EnsureSuccessStatusCode();
-            await using (var input = await response.Content.ReadAsStreamAsync(token))
+            await using (var input = await response.Content.ReadAsStreamAsync(downloadTimeout.Token))
             await using (var output = File.Create(temporary))
-                await input.CopyToAsync(output, token);
+                await input.CopyToAsync(output, downloadTimeout.Token);
             if (!HashMatches(temporary, expected))
             {
                 File.Delete(temporary);
