@@ -279,7 +279,7 @@
                         <Grid.RowDefinitions><RowDefinition Height="58"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                         <Border Background="#19191E" CornerRadius="12"/>
                         <Grid>
-                          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="64"/><ColumnDefinition Width="64"/><ColumnDefinition Width="72"/></Grid.ColumnDefinitions>
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="40"/><ColumnDefinition Width="40"/><ColumnDefinition Width="40"/></Grid.ColumnDefinitions>
                           <ToggleButton x:Name="SavedQueueToggle" HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0" Foreground="{StaticResource TextPrimary}" Cursor="Hand">
                             <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
                               <Border x:Name="QueueHeader" Background="Transparent" CornerRadius="12" Padding="9,0">
@@ -297,9 +297,9 @@
                             </ControlTemplate>
                             </ToggleButton.Template>
                           </ToggleButton>
-                          <Button Grid.Column="1" Content="Load" Margin="4" Padding="11,5" Click="LoadSaved_Click"/>
-                          <Button Grid.Column="2" Content="Share" Background="Transparent" Margin="4" Padding="9,5" Click="ShareSaved_Click"/>
-                          <Button Grid.Column="3" Content="Delete" Background="Transparent" Margin="4" Padding="9,5" Click="DeleteSaved_Click"/>
+                          <Button Grid.Column="1" Style="{StaticResource IconButton}" Content="&#xE768;" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Foreground="#C9B5FF" ToolTip="Load queue" AutomationProperties.Name="Load queue" Click="LoadSaved_Click"/>
+                          <Button Grid.Column="2" Style="{StaticResource IconButton}" Content="&#xE71B;" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Foreground="#B8B4C0" ToolTip="Copy playlist link" AutomationProperties.Name="Copy playlist link" Click="ShareSaved_Click"/>
+                          <Button Grid.Column="3" Style="{StaticResource IconButton}" Content="&#xE74D;" FontFamily="Segoe Fluent Icons,Segoe MDL2 Assets" Foreground="#A9A5B1" ToolTip="Delete queue" AutomationProperties.Name="Delete queue" Click="DeleteSaved_Click"/>
                         </Grid>
                         <Border x:Name="SavedQueueSongs" Grid.Row="1" Visibility="Collapsed" Margin="12,2,12,8" Padding="7" Background="#141419" CornerRadius="0,0,11,11">
                           <ListBox ItemsSource="{Binding Tracks}" MaxHeight="360" ScrollViewer.VerticalScrollBarVisibility="Auto">
