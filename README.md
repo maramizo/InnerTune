@@ -17,7 +17,8 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 ## Controls
 
 - The queue remains visible while you search, chat, or browse your library.
-- **Add** appends a search result without interrupting playback. **Play** or a double-click explicitly starts it.
+- **Play** or a double-click starts a song as a standalone **Playing now** session. **Add** then grows it into an ad-hoc queue without interrupting playback.
+- **Next** places any song directly after the current one. It takes priority over shuffle, and the remaining shuffled songs still play once each.
 - Double-click a queued song to play it.
 - Use **×** on a queue row to remove it.
 - Save queues with paths such as `Focus/Night`; the folders are created automatically.
@@ -67,6 +68,9 @@ powershell -ExecutionPolicy Bypass -File .\diagnostics\capture-settings-hidden.p
 powershell -ExecutionPolicy Bypass -File .\diagnostics\test-mini-memory.ps1 `
   -ApplicationPath "$env:LOCALAPPDATA\Programs\InnerTune\InnerTune.exe" `
   -LibraryPath "$env:LOCALAPPDATA\InnerTune\library.json"
+
+powershell -ExecutionPolicy Bypass -File .\diagnostics\test-queue-flow.ps1 `
+  -ApplicationPath "$env:LOCALAPPDATA\Programs\InnerTune\InnerTune.exe"
 ```
 
 The harness attaches through UI Automation without moving the physical mouse. It leaves an already-running InnerTune process alone and deletes its disposable data when finished.

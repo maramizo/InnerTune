@@ -54,6 +54,13 @@ public sealed class ShuffleNavigator
         return false;
     }
 
+    public void TakeSpecific(int count, int current, int next)
+    {
+        RemoveInvalid(count);
+        _upcoming.Remove(next);
+        if (current >= 0 && current < count && current != next) _history.Push(current);
+    }
+
     private void Fill(int count, int current)
     {
         _upcoming.Clear();

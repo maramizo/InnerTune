@@ -295,6 +295,9 @@ public partial class MainWindow : Window
                 _library.RepeatMode = command.Mode;
                 _player.RepeatMode = command.Mode.ToLowerInvariant() switch { "all" => PlaybackRepeatMode.All, "one" => PlaybackRepeatMode.One, _ => PlaybackRepeatMode.Off };
                 await SaveAsync(); break;
+            case "prioritize_next" when !string.IsNullOrWhiteSpace(command.TrackId):
+                _player.PrioritizeNext(command.TrackId); break;
+            case "clear_play_next": _player.ClearPlayNext(); break;
             case "watch_video": await OpenVideoAsync(); break;
             case "close_video": CloseVideo(); break;
         }
@@ -319,6 +322,13 @@ public partial class MainWindow : Window
         SavedQueuesEmpty.Visibility = _library.SavedQueues.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         SavedQueueList.Visibility = _library.SavedQueues.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         QueueCountText.Text = $"{_library.Queue.Count} {(_library.Queue.Count == 1 ? "song" : "songs")}";
+        QueueHeadingText.Text = _library.QueueSourceName switch
+        {
+            "Playing now" => "Playing now",
+            "Current queue" => "Queue",
+            { Length: > 0 } name => name,
+            _ => "Queue"
+        };
         MiniQueueCount.Text = $"{_library.Queue.Count} {(_library.Queue.Count == 1 ? "song" : "songs")}";
         QueueEmpty.Visibility = _library.Queue.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         QueueList.Visibility = _library.Queue.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -369,6 +379,39 @@ public partial class MainWindow : Window
         _library.QueueSourceId = null;
         _library.QueueSourceName = "Current queue";
         _playbackDirty = true;
+    }
+
+    private async Task AddTrackToQueueAsync(Track track)
+    {
+        QueueFlow.Add(_library.Queue, _player.CurrentTrack, track);
+        MarkQueueEdited();
+        await SaveAsync();
+        SetStatus($"Added {track.Title} to queue");
+    }
+
+    private async Task PlayTrackNextAsync(Track track)
+    {
+        var destination = QueueFlow.PutNext(_library.Queue, _player.CurrentTrack, _player.CurrentIndex, track);
+        if (destination < 0)
+        {
+            SetStatus($"{track.Title} is already playing");
+            return;
+        }
+        MarkQueueEdited();
+        await SaveAsync();
+        _player.PrioritizeNext(track.Id);
+        SetStatus($"{track.Title} will play next");
+    }
+
+    private async Task PlayStandaloneAsync(Track track)
+    {
+        QueueFlow.StartStandalone(_library.Queue, track);
+        _library.QueueSourceId = null;
+        _library.QueueSourceName = "Playing now";
+        _playbackDirty = true;
+        _player.ClearPlayNext();
+        await SaveAsync();
+        await _player.PlayAsync(0);
     }
 
     private async Task RestorePlaybackAsync()
@@ -1566,10 +1609,14 @@ public partial class MainWindow : Window
     {
         e.Handled = true;
         if ((sender as FrameworkElement)?.DataContext is not DiscoveryItem { Track: { } track }) return;
-        _library.Queue.Add(track);
-        MarkQueueEdited();
-        await SaveAsync();
-        SetStatus($"Added {track.Title} to queue");
+        await AddTrackToQueueAsync(track);
+    }
+
+    private async void PlayNextDiscovery_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if ((sender as FrameworkElement)?.DataContext is DiscoveryItem { Track: { } track })
+            await PlayTrackNextAsync(track);
     }
 
     private async void RemoveRecent_Click(object sender, RoutedEventArgs e)
@@ -1644,6 +1691,7 @@ public partial class MainWindow : Window
     private async void PlayCollection_Click(object sender, RoutedEventArgs e)
     {
         if (_collectionDetail is not { Tracks.Count: > 0 } detail) return;
+        _player.ClearPlayNext();
         _library.Queue.Clear();
         foreach (var track in detail.Tracks) _library.Queue.Add(track);
         _library.QueueSourceId = $"{detail.Kind}:{detail.Id}";
@@ -1656,7 +1704,7 @@ public partial class MainWindow : Window
     private async void AddCollection_Click(object sender, RoutedEventArgs e)
     {
         if (_collectionDetail is not { Tracks.Count: > 0 } detail) return;
-        foreach (var track in detail.Tracks) _library.Queue.Add(track);
+        foreach (var track in detail.Tracks) QueueFlow.Add(_library.Queue, _player.CurrentTrack, track);
         MarkQueueEdited();
         await SaveAsync();
         SetStatus($"Added {detail.Tracks.Count} songs to queue");
@@ -1674,10 +1722,13 @@ public partial class MainWindow : Window
     {
         e.Handled = true;
         if ((sender as FrameworkElement)?.DataContext is not Track track) return;
-        _library.Queue.Add(track);
-        MarkQueueEdited();
-        await SaveAsync();
-        SetStatus($"Added {track.Title} to queue");
+        await AddTrackToQueueAsync(track);
+    }
+
+    private async void PlayNextCollectionTrack_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if ((sender as FrameworkElement)?.DataContext is Track track) await PlayTrackNextAsync(track);
     }
 
     private static void SetImage(System.Windows.Controls.Image image, string? url)
@@ -1726,7 +1777,12 @@ public partial class MainWindow : Window
     private async void AddResult_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not Track track) return;
-        _library.Queue.Add(track); MarkQueueEdited(); await SaveAsync(); SetStatus($"Added {track.Title} to queue");
+        await AddTrackToQueueAsync(track);
+    }
+
+    private async void PlayNextResult_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is Track track) await PlayTrackNextAsync(track);
     }
 
     private async void PlayResult_Click(object sender, RoutedEventArgs e)
@@ -1736,9 +1792,7 @@ public partial class MainWindow : Window
 
     private async Task PlaySearchResultAsync(Track track)
     {
-        var index = _library.Queue.ToList().FindIndex(item => item.Id == track.Id);
-        if (index < 0) { _library.Queue.Add(track); MarkQueueEdited(); await SaveAsync(); index = _library.Queue.Count - 1; }
-        await _player.PlayAsync(index);
+        await PlayStandaloneAsync(track);
     }
 
     private async void SearchResults_DoubleClick(object sender, MouseButtonEventArgs e)
@@ -1756,6 +1810,12 @@ public partial class MainWindow : Window
     {
         if ((sender as FrameworkElement)?.DataContext is not Track track) return;
         _library.Queue.Remove(track); MarkQueueEdited(); await SaveAsync(); SetStatus($"Removed {track.Title}");
+    }
+
+    private async void PlayNextQueue_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if ((sender as FrameworkElement)?.DataContext is Track track) await PlayTrackNextAsync(track);
     }
 
     private async void FavoriteTrack_Click(object sender, RoutedEventArgs e)
@@ -1805,6 +1865,7 @@ public partial class MainWindow : Window
 
     private async void ClearQueue_Click(object sender, RoutedEventArgs e)
     {
+        _player.ClearPlayNext();
         _library.Queue.Clear(); MarkQueueEdited(); await SaveAsync(); SetStatus("Queue cleared");
     }
 
@@ -1917,6 +1978,7 @@ public partial class MainWindow : Window
     private async void LoadSaved_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not SavedQueue saved) return;
+        _player.ClearPlayNext();
         _library.Queue.Clear(); foreach (var track in saved.Tracks) _library.Queue.Add(track);
         _library.QueueSourceId = saved.Id;
         _library.QueueSourceName = string.IsNullOrWhiteSpace(saved.DisplayPath) ? saved.Name : saved.DisplayPath;
@@ -1928,6 +1990,7 @@ public partial class MainWindow : Window
     {
         if ((sender as FrameworkElement)?.DataContext is not Track track ||
             (sender as FrameworkElement)?.Tag is not SavedQueue saved) return;
+        _player.ClearPlayNext();
         _library.Queue.Clear();
         foreach (var item in saved.Tracks) _library.Queue.Add(item);
         _library.QueueSourceId = saved.Id;
@@ -1949,7 +2012,17 @@ public partial class MainWindow : Window
     private async void AddFavorite_Click(object sender, RoutedEventArgs e)
     {
         if ((sender as FrameworkElement)?.DataContext is not Favorite favorite) return;
-        _library.Queue.Add(favorite.Track); MarkQueueEdited(); await SaveAsync(); SetStatus($"Added {favorite.Track.Title} to queue");
+        await AddTrackToQueueAsync(favorite.Track);
+    }
+
+    private async void PlayFavorite_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is Favorite favorite) await PlayStandaloneAsync(favorite.Track);
+    }
+
+    private async void PlayNextFavorite_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is Favorite favorite) await PlayTrackNextAsync(favorite.Track);
     }
 
     private async void Unfavorite_Click(object sender, RoutedEventArgs e)

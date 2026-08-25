@@ -91,6 +91,7 @@ public sealed class PlaybackCommand
     public double? Value { get; set; }
     public bool? Enabled { get; set; }
     public string? Mode { get; set; }
+    public string? TrackId { get; set; }
 }
 
 public sealed class PlaybackSnapshot

@@ -24,6 +24,21 @@ if (!navigator.TryPrevious(count, newCycleSong, out var previous) || previous !=
 if (!navigator.TryNext(count, previous, false, out var forwardAgain) || forwardAgain != newCycleSong)
     throw new InvalidOperationException("Shuffle history did not preserve forward navigation.");
 
+var priorityNavigator = new ShuffleNavigator(new Random(1729));
+priorityNavigator.Reset(5, 0);
+priorityNavigator.TakeSpecific(5, 0, 3);
+var priorityCycle = new List<int> { 0, 3 };
+var priorityCurrent = 3;
+while (priorityNavigator.TryNext(5, priorityCurrent, false, out var priorityNext))
+{
+    if (priorityCycle.Contains(priorityNext))
+        throw new InvalidOperationException("A Play next song was repeated by shuffle.");
+    priorityCycle.Add(priorityNext);
+    priorityCurrent = priorityNext;
+}
+if (priorityCycle.Count != 5)
+    throw new InvalidOperationException("Play next caused shuffle to skip a song.");
+
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed = true,
@@ -31,5 +46,6 @@ Console.WriteLine(JsonSerializer.Serialize(new
     uniqueSongsInCycle = cycle.Distinct().Count(),
     order = cycle,
     stoppedAtCycleEnd = true,
-    previousAndForwardPreserved = true
+    previousAndForwardPreserved = true,
+    playNextPreservedShuffleCycle = true
 }));

@@ -28,6 +28,7 @@ public sealed class PlayerService : IDisposable
     private TimeSpan _pendingPosition;
     private CancellationTokenSource? _loadCancel;
     private readonly ShuffleNavigator _shuffle = new();
+    private readonly List<string> _playNextIds = [];
     private bool _shuffleEnabled;
 
     public event EventHandler? StateChanged;
@@ -82,7 +83,17 @@ public sealed class PlayerService : IDisposable
             _index = newIndex;
         }
         if (changed && ShuffleEnabled) _shuffle.Reset(_queue.Count, _index);
+        _playNextIds.RemoveAll(id => !queue.Any(track => track.Id == id));
     }
+
+    public void PrioritizeNext(string trackId)
+    {
+        _playNextIds.RemoveAll(id => id == trackId);
+        _playNextIds.Insert(0, trackId);
+        _ = PrefetchNextAsync();
+    }
+
+    public void ClearPlayNext() => _playNextIds.Clear();
 
     public Task PlayAsync(int index)
     {
@@ -188,6 +199,17 @@ public sealed class PlayerService : IDisposable
     {
         if (_queue.Count == 0) return;
         var current = _currentTrack is null ? -1 : _queue.ToList().FindIndex(track => track.Id == _currentTrack.Id);
+        while (_playNextIds.Count > 0)
+        {
+            var id = _playNextIds[0];
+            _playNextIds.RemoveAt(0);
+            var prioritized = Enumerable.Range(0, _queue.Count)
+                .FirstOrDefault(index => index != current && _queue[index].Id == id, -1);
+            if (prioritized < 0) continue;
+            if (ShuffleEnabled) _shuffle.TakeSpecific(_queue.Count, current, prioritized);
+            await StartTrackAsync(_queue[prioritized], prioritized, TimeSpan.Zero);
+            return;
+        }
         if (automatic && RepeatMode == PlaybackRepeatMode.One && current >= 0)
         {
             await StartTrackAsync(_queue[current], current, TimeSpan.Zero);
@@ -247,7 +269,10 @@ public sealed class PlayerService : IDisposable
     {
         if (_queue.Count < 2 || _currentTrack is null) return;
         var current = _queue.ToList().FindIndex(track => track.Id == _currentTrack.Id);
-        var next = _queue[(current + 1 + _queue.Count) % _queue.Count];
+        var prioritized = _playNextIds.Select(id => Enumerable.Range(0, _queue.Count)
+                .FirstOrDefault(index => index != current && _queue[index].Id == id, -1))
+            .FirstOrDefault(index => index >= 0, -1);
+        var next = _queue[prioritized >= 0 ? prioritized : (current + 1 + _queue.Count) % _queue.Count];
         if (_preparedFiles.ContainsKey(next.Id)) return;
         try { _preparedFiles[next.Id] = await PrepareAudioAsync(next.Id, CancellationToken.None); }
         catch { }
