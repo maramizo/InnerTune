@@ -17,6 +17,23 @@ namespace InnerTune;
 
 public partial class MainWindow : Window
 {
+    public static readonly DependencyProperty QueueEqualizerLevelProperty = DependencyProperty.Register(
+        nameof(QueueEqualizerLevel), typeof(double), typeof(MainWindow), new PropertyMetadata(0d));
+    public static readonly DependencyProperty QueueEqualizerPhaseProperty = DependencyProperty.Register(
+        nameof(QueueEqualizerPhase), typeof(double), typeof(MainWindow), new PropertyMetadata(0d));
+
+    public double QueueEqualizerLevel
+    {
+        get => (double)GetValue(QueueEqualizerLevelProperty);
+        private set => SetValue(QueueEqualizerLevelProperty, value);
+    }
+
+    public double QueueEqualizerPhase
+    {
+        get => (double)GetValue(QueueEqualizerPhaseProperty);
+        private set => SetValue(QueueEqualizerPhaseProperty, value);
+    }
+
     private readonly LibraryStore _store = new();
     private readonly ProviderService _provider = new();
     private readonly ProviderService _discoveryProvider = new(TimeSpan.FromSeconds(10));
@@ -677,7 +694,7 @@ public partial class MainWindow : Window
             return;
         }
         var now = DateTime.UtcNow;
-        if (now - _lastIconFrameAt < TimeSpan.FromMilliseconds(60)) return;
+        if (now - _lastIconFrameAt < TimeSpan.FromMilliseconds(30)) return;
         var trackId = _player.CurrentTrack?.Id;
         if (!string.Equals(trackId, _djIconTrackId, StringComparison.Ordinal))
         {
@@ -717,6 +734,8 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(() =>
         {
             Interlocked.Exchange(ref _iconUpdateQueued, 0);
+            QueueEqualizerLevel = Math.Clamp(_pendingAudioLevel, 0, 1);
+            QueueEqualizerPhase = (QueueEqualizerPhase + .20 + QueueEqualizerLevel * .58) % (Math.PI * 2);
             UpdateAnimatedIcon(_pendingAudioLevel);
         }, DispatcherPriority.Background);
     }
@@ -2494,7 +2513,22 @@ public partial class MainWindow : Window
             UpdateLayout();
             await Dispatcher.Yield(DispatcherPriority.Render);
             await Task.Delay(1800);
+            if (view.Equals("saved", StringComparison.OrdinalIgnoreCase) &&
+                Environment.GetEnvironmentVariable(AppRuntime.TestExpandActiveQueueVariable) == "1" &&
+                _library.SavedQueues.FirstOrDefault(queue => queue.IsActive) is { } activeQueue &&
+                SavedQueueList.ItemContainerGenerator.ContainerFromItem(activeQueue) is { } activeContainer &&
+                FindVisualChild<System.Windows.Controls.Primitives.ToggleButton>(activeContainer) is { } queueToggle)
+            {
+                queueToggle.IsChecked = true;
+                UpdateLayout();
+                await Dispatcher.Yield(DispatcherPriority.Render);
+            }
             if (int.TryParse(Environment.GetEnvironmentVariable(AppRuntime.TestIconFrameVariable), out var iconFrame)) SetDjFrame(iconFrame);
+            if (double.TryParse(Environment.GetEnvironmentVariable(AppRuntime.TestEqualizerLevelVariable), out var equalizerLevel))
+            {
+                QueueEqualizerLevel = Math.Clamp(equalizerLevel, 0, 1);
+                QueueEqualizerPhase = 2.4;
+            }
             UpdateLayout();
             await Dispatcher.Yield(DispatcherPriority.Render);
             Directory.CreateDirectory(outputDirectory);

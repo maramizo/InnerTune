@@ -158,7 +158,7 @@ public sealed class PlayerService : IDisposable
             _reader = new MediaFoundationReader(source);
             _currentSource = source;
             _reader.CurrentTime = ClampPosition(_pendingPosition, (int)Math.Ceiling(_reader.TotalTime.TotalSeconds));
-            const int animationSamplesPerSecond = 15;
+            const int animationSamplesPerSecond = 30;
             var samplesPerNotification = Math.Max(1,
                 _reader.WaveFormat.SampleRate * _reader.WaveFormat.Channels / animationSamplesPerSecond);
             _meter = new RmsMeteringSampleProvider(_reader.ToSampleProvider(), samplesPerNotification);

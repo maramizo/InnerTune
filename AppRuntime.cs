@@ -14,6 +14,8 @@ public static class AppRuntime
     public const string TestCaptureDirectoryVariable = "INNERTUNE_TEST_CAPTURE_DIR";
     public const string TestCaptureViewVariable = "INNERTUNE_TEST_CAPTURE_VIEW";
     public const string TestIconFrameVariable = "INNERTUNE_TEST_ICON_FRAME";
+    public const string TestEqualizerLevelVariable = "INNERTUNE_TEST_EQUALIZER_LEVEL";
+    public const string TestExpandActiveQueueVariable = "INNERTUNE_TEST_EXPAND_ACTIVE_QUEUE";
 
     public static bool IsTestMode { get; } =
         string.Equals(Environment.GetEnvironmentVariable(TestModeVariable), "1", StringComparison.OrdinalIgnoreCase);

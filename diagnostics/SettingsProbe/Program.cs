@@ -15,7 +15,7 @@ var roundTrip = JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize
 var serializationWorks = roundTrip is { AutoResumeOnStart: true, Theme: "midnight", Icon: "dj-cat" };
 var iconAnimator = new AudioIconAnimator();
 iconAnimator.SetTempo(100);
-var animatedFrames = Enumerable.Range(0, 36).Select(_ => iconAnimator.Update(.8f, true, true, 1d / 15)).ToArray();
+var animatedFrames = Enumerable.Range(0, 72).Select(_ => iconAnimator.Update(.8f, true, true, 1d / 30)).ToArray();
 var iconLevelsWork = iconAnimator.Update(0, false, true) == 0 &&
     animatedFrames.Distinct().Count() >= AudioIconAnimator.PhaseCount &&
     animatedFrames.Min() >= AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, 0) &&
@@ -29,10 +29,10 @@ var priorJump = false;
 var sawLevelChange = false;
 var sawJump = false;
 var motionChangesOnlyAtRest = true;
-for (var sample = 0; sample < 180; sample++)
+for (var sample = 0; sample < 360; sample++)
 {
-    var level = sample % 24 < 12 ? .95f : .03f;
-    var frame = latchingAnimator.Update(level, true, true, 1d / 15);
+    var level = sample % 48 < 24 ? .95f : .03f;
+    var frame = latchingAnimator.Update(level, true, true, 1d / 30);
     var frameLevel = AudioIconAnimator.DecodeLevel(frame);
     var jumping = AudioIconAnimator.IsJumpFrame(frame);
     if (frameLevel != priorLevel || jumping != priorJump)
@@ -45,11 +45,19 @@ for (var sample = 0; sample < 180; sample++)
     priorJump = jumping;
 }
 var groundedMotionTransitionsWork = sawLevelChange && sawJump && motionChangesOnlyAtRest;
+var offBeatJumpAnimator = new AudioIconAnimator();
+offBeatJumpAnimator.SetTempo(120);
+offBeatJumpAnimator.SetMotionProfile(1, .35);
+var offBeatJumpFrame = 0;
+for (var sample = 0; sample <= 15; sample++)
+    offBeatJumpFrame = offBeatJumpAnimator.Update(sample == 15 ? .001f : .95f, true, true, 1d / 30);
+var offBeatLandingStillJumps = AudioIconAnimator.IsJumpFrame(offBeatJumpFrame) &&
+    AudioIconAnimator.IsRestPhase(AudioIconAnimator.DecodePhase(offBeatJumpFrame));
 var pianoAnimator = new AudioIconAnimator();
 pianoAnimator.SetTempo(120);
 pianoAnimator.SetMotionProfile(.18, .22);
-var pianoDoesNotJump = Enumerable.Range(0, 180)
-    .Select(index => pianoAnimator.Update(index % 15 == 0 ? .9f : .15f, true, true, 1d / 15))
+var pianoDoesNotJump = Enumerable.Range(0, 360)
+    .Select(index => pianoAnimator.Update(index % 30 == 0 ? .9f : .15f, true, true, 1d / 30))
     .All(frame => !AudioIconAnimator.IsJumpFrame(frame));
 var danceEnvelope = Enumerable.Range(0, 96).Select(index => index % 4 == 0 ? .74f : .10f).ToArray();
 var danceLowEnvelope = Enumerable.Range(0, 96).Select(index => index % 4 == 0 ? .40f : .035f).ToArray();
@@ -80,9 +88,9 @@ static (double Bpm, int PhaseChanges, bool Locked, bool Stable) AnalyzeTempo(dou
     animator.SetTempo(lockedBpm);
     var phaseChanges = 0;
     var previousPhase = -1;
-    for (var elapsed = 0d; elapsed < 4; elapsed += 1d / 15)
+    for (var elapsed = 0d; elapsed < 4; elapsed += 1d / 30)
     {
-        var frame = animator.Update(.8f, true, true, 1d / 15);
+        var frame = animator.Update(.8f, true, true, 1d / 30);
         var phase = (frame - 1) % AudioIconAnimator.PhaseCount;
         if (previousPhase >= 0 && phase != previousPhase) phaseChanges++;
         previousPhase = phase;
@@ -203,7 +211,7 @@ if (args.FirstOrDefault() is { Length: > 0 } inspectedPath && File.Exists(inspec
         using var inspectedReader = new MediaFoundationReader(inspectedPath);
         var inspectedMeter = new RmsMeteringSampleProvider(
             inspectedReader.ToSampleProvider(),
-            inspectedReader.WaveFormat.SampleRate * inspectedReader.WaveFormat.Channels / 15);
+            inspectedReader.WaveFormat.SampleRate * inspectedReader.WaveFormat.Channels / 30);
         var inspectedAnimator = new AudioIconAnimator();
         inspectedAnimator.SetTempo(inspectedAnalysis.Bpm);
         inspectedAnimator.SetMotionProfile(inspectedAnalysis.Danceability, inspectedAnalysis.PeakLoudness);
@@ -211,7 +219,7 @@ if (args.FirstOrDefault() is { Length: > 0 } inspectedPath && File.Exists(inspec
         var inspectedJumpFrames = 0;
         inspectedMeter.LoudnessAvailable += loudness =>
         {
-            var frame = inspectedAnimator.Update(loudness, true, true, 1d / 15);
+            var frame = inspectedAnimator.Update(loudness, true, true, 1d / 30);
             inspectedFrames++;
             if (AudioIconAnimator.IsJumpFrame(frame)) inspectedJumpFrames++;
         };
@@ -220,7 +228,7 @@ if (args.FirstOrDefault() is { Length: > 0 } inspectedPath && File.Exists(inspec
         inspectedJumpCoverage = inspectedFrames == 0 ? 0 : inspectedJumpFrames / (double)inspectedFrames;
     }
 }
-var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && groundedMotionTransitionsWork && pianoDoesNotJump && raveClassificationWorks && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
+var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && groundedMotionTransitionsWork && offBeatLandingStillJumps && pianoDoesNotJump && raveClassificationWorks && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed,
@@ -229,6 +237,7 @@ Console.WriteLine(JsonSerializer.Serialize(new
     animatedIconDefault = new AppSettings().AnimatedIconEnabled,
     audioIconLevelsWork = iconLevelsWork,
     groundedMotionTransitionsWork,
+    offBeatLandingStillJumps,
     pianoDoesNotJump,
     raveClassificationWorks,
     danceScore,

@@ -3,7 +3,9 @@ param(
     [string]$OutputDirectory = "$env:TEMP\InnerTuneSettingsCapture",
     [ValidateSet('settings', 'saved')] [string]$View = 'settings',
     [string]$LibraryPath,
-    [ValidateRange(0, 40)] [int]$IconFrame = 0
+    [ValidateRange(0, 144)] [int]$IconFrame = 0,
+    [ValidateRange(0, 1)] [double]$EqualizerLevel = 0.7,
+    [switch]$ExpandActiveQueue
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +27,8 @@ $previous = @{
     Capture = $env:INNERTUNE_TEST_CAPTURE_DIR
     View = $env:INNERTUNE_TEST_CAPTURE_VIEW
     IconFrame = $env:INNERTUNE_TEST_ICON_FRAME
+    EqualizerLevel = $env:INNERTUNE_TEST_EQUALIZER_LEVEL
+    ExpandActiveQueue = $env:INNERTUNE_TEST_EXPAND_ACTIVE_QUEUE
 }
 $process = $null
 try {
@@ -34,6 +38,8 @@ try {
     $env:INNERTUNE_TEST_CAPTURE_DIR = $OutputDirectory
     $env:INNERTUNE_TEST_CAPTURE_VIEW = $View
     $env:INNERTUNE_TEST_ICON_FRAME = $IconFrame
+    $env:INNERTUNE_TEST_EQUALIZER_LEVEL = $EqualizerLevel.ToString([Globalization.CultureInfo]::InvariantCulture)
+    $env:INNERTUNE_TEST_EXPAND_ACTIVE_QUEUE = if ($ExpandActiveQueue) { '1' } else { '0' }
     $process = Start-Process $ApplicationPath -PassThru
     $deadline = [DateTime]::UtcNow.AddSeconds(15)
     $captureName = if ($View -eq 'saved') { 'saved-queues.png' } else { 'settings.png' }
@@ -63,5 +69,7 @@ finally {
     $env:INNERTUNE_TEST_CAPTURE_DIR = $previous.Capture
     $env:INNERTUNE_TEST_CAPTURE_VIEW = $previous.View
     $env:INNERTUNE_TEST_ICON_FRAME = $previous.IconFrame
+    $env:INNERTUNE_TEST_EQUALIZER_LEVEL = $previous.EqualizerLevel
+    $env:INNERTUNE_TEST_EXPAND_ACTIVE_QUEUE = $previous.ExpandActiveQueue
     if (Test-Path $testRoot) { Remove-Item $testRoot -Recurse -Force }
 }

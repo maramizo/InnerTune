@@ -3,7 +3,7 @@ namespace InnerTune;
 public sealed class AudioIconAnimator
 {
     public const int LevelCount = 6;
-    public const int PhaseCount = 12;
+    public const int PhaseCount = 24;
     public const int JumpFrameOffset = 1 + (LevelCount - 1) * PhaseCount;
     public const int FrameCount = JumpFrameOffset + PhaseCount;
     public const double JumpStartThreshold = .38;
@@ -35,8 +35,9 @@ public sealed class AudioIconAnimator
 
         var input = Math.Clamp(level, 0, 1);
         var elapsed = Math.Clamp(elapsedSeconds, .025, .5);
-        _envelope += (input - _envelope) * (input > _envelope ? .62f : .22f);
-        _reference = Math.Max(_envelope, Math.Max(.05f, _reference * .992f));
+        var baselineTicks = elapsed * 15;
+        _envelope += (input - _envelope) * TimeAdjustedBlend(input > _envelope ? .62 : .22, baselineTicks);
+        _reference = Math.Max(_envelope, Math.Max(.05f, _reference * (float)Math.Pow(.992, baselineTicks)));
 
         var normalized = Math.Clamp(_envelope / _reference, 0, 1);
         var audible = Math.Clamp(input / .045f, 0, 1);
@@ -45,7 +46,7 @@ public sealed class AudioIconAnimator
             ? 0
             : Math.Clamp((int)MathF.Round(energy * (LevelCount - 1)), 1, LevelCount - 1);
 
-        _sustainedLoudness += (input - _sustainedLoudness) * (input > _sustainedLoudness ? .18f : .08f);
+        _sustainedLoudness += (input - _sustainedLoudness) * TimeAdjustedBlend(input > _sustainedLoudness ? .18 : .08, baselineTicks);
         _songMaximumLoudness = Math.Max(_songMaximumLoudness, _sustainedLoudness);
         var relativeLoudness = Math.Clamp(_sustainedLoudness / Math.Max(.04f, _songMaximumLoudness), 0, 1);
         var absoluteGate = SmoothStep(.07, .18, _sustainedLoudness);
@@ -70,7 +71,7 @@ public sealed class AudioIconAnimator
             // reads as a stutter. Loudness and jumping therefore only change
             // while both paws and the cat are back on the deck.
             _activeAmplitudeLevel = _pendingAmplitudeLevel;
-            _activeJump = _jumpRequested && _activeAmplitudeLevel == LevelCount - 1;
+            _activeJump = _jumpRequested;
         }
 
         var frame = _activeAmplitudeLevel <= 0
@@ -79,8 +80,8 @@ public sealed class AudioIconAnimator
                 ? EncodeJump(phase)
                 : Encode(_activeAmplitudeLevel, phase);
 
-        // One complete gesture spans two beats. That keeps all twelve poses
-        // legible at the player's low-cost 15 Hz meter rate while still making
+        // One complete gesture spans two beats. Twenty-four poses at the
+        // player's 30 Hz meter rate keep motion fluid while still making
         // fast tracks visibly more energetic than slow ones. Never skip a pose:
         // the grounded frames are also the safe state-transition boundary.
         var phaseAdvance = Math.Min(1, elapsed * _bpm / 60 * PhaseCount / 2);
@@ -152,4 +153,7 @@ public sealed class AudioIconAnimator
         var position = Math.Clamp((value - low) / (high - low), 0, 1);
         return position * position * (3 - 2 * position);
     }
+
+    private static float TimeAdjustedBlend(double baselineBlend, double baselineTicks) =>
+        (float)(1 - Math.Pow(1 - baselineBlend, baselineTicks));
 }
