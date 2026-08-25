@@ -176,22 +176,20 @@ public partial class MainWindow : Window
                 return;
             }
             if (!userInitiated && string.Equals(_offeredUpdateTag, update.Tag, StringComparison.OrdinalIgnoreCase)) return;
-            _offeredUpdateTag = update.Tag;
-            ShowAndActivate();
-            var choice = System.Windows.MessageBox.Show(this,
-                $"InnerTune {update.Version} is available.\n\nDownload it and restart InnerTune now? Playback will resume from your saved position.",
-                "InnerTune update", MessageBoxButton.YesNo, MessageBoxImage.Information);
-            if (choice != MessageBoxResult.Yes) return;
             SetStatus($"Downloading InnerTune {update.Version}…");
             var prepared = await _updates.DownloadAsync(update);
+            SetStatus($"Installing InnerTune {update.Version}…");
             CapturePlaybackState();
             await _store.SaveAsync(_library);
             UpdateService.LaunchInstaller(prepared);
+            _offeredUpdateTag = update.Tag;
         }
         catch (Exception error)
         {
             AppRuntime.TestLog($"update failed: {error}");
-            if (userInitiated) SetStatus($"Update check failed: {error.Message}", true);
+            SetStatus(userInitiated
+                ? $"Update check failed: {error.Message}"
+                : "Automatic update failed — InnerTune will retry later", true);
         }
         finally { _checkingUpdates = false; }
     }

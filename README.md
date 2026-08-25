@@ -4,7 +4,7 @@ A local-first Windows music player backed by YouTube Music's InnerTube API. The 
 
 ## Install and run
 
-Download the latest `InnerTune-Setup-*.exe` from [GitHub Releases](https://github.com/maramizo/InnerTune/releases/latest) and run it. InnerTune checks GitHub Releases at startup and every 12 hours. Updates are downloaded only when a matching SHA-256 asset is present, then installed with a one-click restart.
+Download the latest `InnerTune-Setup-*.exe` from [GitHub Releases](https://github.com/maramizo/InnerTune/releases/latest) and run it. InnerTune checks GitHub Releases at startup and every 12 hours. When a newer release has a matching SHA-256 asset, InnerTune downloads it, saves playback state, installs it, and restarts automatically.
 
 InnerTune remains available from the notification area when its window is hidden.
 
