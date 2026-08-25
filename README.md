@@ -19,7 +19,7 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 - The queue remains visible while you search, chat, or browse your library.
 - **Play** or a double-click starts a song as a standalone **Playing now** session. **Add** then grows it into an ad-hoc queue without interrupting playback.
 - **Next** places any song directly after the current one. It takes priority over shuffle, and the remaining shuffled songs still play once each.
-- Select an artist name anywhere in the app to open that artist’s InnerTube catalog and browse all available songs.
+- Select an artist name anywhere in the app to open that artist’s complete multi-page InnerTube catalog. Older library entries resolve and remember their artist ID automatically.
 - Double-click a queued song to play it.
 - Use **×** on a queue row to remove it.
 - Save queues with paths such as `Focus/Night`; the folders are created automatically.

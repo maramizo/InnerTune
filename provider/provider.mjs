@@ -203,33 +203,84 @@ function artistTrackItems(value, depth = 0, found = []) {
 }
 
 function sameArtist(trackArtist, requested) {
-  const clean = value => String(value || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
-  const wanted = clean(requested);
-  const actual = clean(trackArtist);
+  const wanted = cleanArtistName(requested);
+  const actual = cleanArtistName(trackArtist);
   return wanted && (actual === wanted || actual.startsWith(`${wanted} `) || actual.endsWith(` ${wanted}`));
+}
+
+function cleanArtistName(value) {
+  return String(value || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+async function resolveArtist(requestedName) {
+  if (!requestedName) return undefined;
+  const response = await client.music.search(requestedName, {type: 'artist'});
+  const candidates = (response.artists?.contents || [])
+    .map(item => ({
+      id: artistId(item) || item.endpoint?.payload?.browseId,
+      name: item.name || text(item.title),
+      artworkUrl: thumbnail(item)
+    }))
+    .filter(candidate => candidate.id?.startsWith('UC') && candidate.name);
+  const wanted = cleanArtistName(requestedName);
+  return candidates.find(candidate => cleanArtistName(candidate.name) === wanted);
+}
+
+function continuationItems(response) {
+  return [
+    ...(response?.continuation_contents?.contents || []),
+    ...(response?.on_response_received_actions || []).flatMap(action => action.contents || [])
+  ];
+}
+
+async function allArtistSongItems(shelf) {
+  const songs = [];
+  const seenContinuations = new Set();
+  let contents = [...(shelf?.contents || [])];
+  let continuationToken = shelf?.continuation;
+  for (let page = 0; page < 50 && contents.length && songs.length < 10_000; page++) {
+    songs.push(...contents.filter(item => item?.type !== 'ContinuationItem'));
+    const continuationItem = contents.find(item => item?.type === 'ContinuationItem' && item.endpoint);
+    const token = continuationItem?.endpoint?.payload?.token || continuationToken;
+    if (!token || seenContinuations.has(token)) break;
+    seenContinuations.add(token);
+    const response = continuationItem
+      ? await continuationItem.endpoint.call(client.actions, {client: 'YTMUSIC', parse: true})
+      : await client.actions.execute('/browse', {continuation: token, client: 'YTMUSIC', parse: true});
+    contents = continuationItems(response);
+    continuationToken = response?.continuation_contents?.continuation;
+  }
+  return songs;
 }
 
 async function artist(argument = {}) {
   await initialize();
-  const id = String(argument?.id || '').trim();
+  const suppliedId = String(argument?.id || '').trim();
   const requestedName = String(argument?.name || '').trim();
-  if (!requestedName && !id) throw new Error('This artist has no name or id.');
-  const [page, searched] = await Promise.all([
-    id ? client.music.getArtist(id).catch(() => undefined) : Promise.resolve(undefined),
-    requestedName ? search(`${requestedName} songs`) : Promise.resolve([])
-  ]);
+  if (!requestedName && !suppliedId) throw new Error('This artist has no name or id.');
+  let id = suppliedId;
+  let resolved;
+  let page = id ? await client.music.getArtist(id).catch(() => undefined) : undefined;
+  if ((!page?.header || !page.sections?.length) && requestedName) {
+    resolved = await resolveArtist(requestedName).catch(() => undefined);
+    id = resolved?.id || '';
+    page = id ? await client.music.getArtist(id).catch(() => undefined) : undefined;
+  }
   let pageSongs;
   if (page && typeof page.getAllSongs === 'function') {
     try { pageSongs = await page.getAllSongs(); } catch {}
   }
   const header = page?.header;
-  const name = text(header?.title) || requestedName || 'Artist';
-  const artworkUrl = thumbnail(header) || thumbnail(page?.background);
-  const catalogTracks = artistTrackItems(pageSongs || page)
+  const name = text(header?.title) || resolved?.name || requestedName || 'Artist';
+  const artworkUrl = thumbnail(header) || thumbnail(page?.background) || resolved?.artworkUrl;
+  const catalogItems = pageSongs ? await allArtistSongItems(pageSongs) : artistTrackItems(page);
+  const catalogTracks = catalogItems
     .map(item => trackFromItem(item, artworkUrl, name))
     .filter(Boolean);
-  const searchedTracks = searched.filter(track => sameArtist(track.artist, requestedName || name));
-  const tracks = uniqueItems([...catalogTracks, ...searchedTracks]);
+  const searchedTracks = catalogTracks.length || !requestedName
+    ? []
+    : (await search(`${requestedName} songs`)).filter(track => sameArtist(track.artist, requestedName || name));
+  const tracks = uniqueItems(catalogTracks.length ? catalogTracks : searchedTracks);
   return {
     id: id || `artist:${name}`,
     kind: 'artist',

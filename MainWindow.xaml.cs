@@ -1730,6 +1730,7 @@ public partial class MainWindow : Window
         try
         {
             var detail = await _discoveryProvider.ArtistAsync(track.Artist, track.ArtistId);
+            await CacheResolvedArtistAsync(track, detail);
             _collectionDetail = detail;
             for (var index = 0; index < detail.Tracks.Count; index++)
             {
@@ -1756,6 +1757,34 @@ public partial class MainWindow : Window
             SetStatus(error.Message, true);
         }
         finally { CollectionLoading.Visibility = Visibility.Collapsed; }
+    }
+
+    private async Task CacheResolvedArtistAsync(Track source, CollectionDetail detail)
+    {
+        if (!detail.Id.StartsWith("UC", StringComparison.Ordinal) ||
+            source.ArtistId == detail.Id ||
+            !source.Artist.Equals(detail.Title, StringComparison.OrdinalIgnoreCase)) return;
+
+        var previousId = source.ArtistId;
+        var storedTracks = _library.Queue
+            .Concat(_library.Favorites.Select(favorite => favorite.Track))
+            .Concat(_library.SavedQueues.SelectMany(queue => queue.Tracks))
+            .Concat(_library.RecentlyPlayed.Select(history => history.Track))
+            .Concat(_library.Playback.Track is { } playbackTrack
+                ? Enumerable.Repeat(playbackTrack, 1)
+                : Enumerable.Empty<Track>())
+            .Distinct()
+            .ToList();
+        var changed = false;
+        foreach (var track in storedTracks.Where(track =>
+                     (string.IsNullOrWhiteSpace(track.ArtistId) || track.ArtistId == previousId) &&
+                     track.Artist.Equals(source.Artist, StringComparison.OrdinalIgnoreCase)))
+        {
+            track.ArtistId = detail.Id;
+            changed = true;
+        }
+        source.ArtistId = detail.Id;
+        if (changed) await SaveAsync();
     }
 
     private async void PlayCollection_Click(object sender, RoutedEventArgs e)
