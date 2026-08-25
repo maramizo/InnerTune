@@ -126,7 +126,10 @@ public sealed partial class LyricsService : IDisposable
 
     private static LyricsDocument Missing(Track track) => new()
     {
-        TrackId = track.Id, TrackName = track.Title, ArtistName = track.Artist, FetchedAt = DateTimeOffset.UtcNow
+        TrackId = track.Id,
+        TrackName = track.Title,
+        ArtistName = track.Artist,
+        FetchedAt = DateTimeOffset.UtcNow
     };
 
     private static List<LyricsLine> ParseSynced(string? lyrics)

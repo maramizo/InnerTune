@@ -1,15 +1,15 @@
-using System.Collections.ObjectModel;
 using System.Collections;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Media.Animation;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
@@ -51,7 +51,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(4) };
     private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(12) };
     private readonly DispatcherTimer _iconAnimationTimer = new(DispatcherPriority.Render)
-        { Interval = TimeSpan.FromMilliseconds(1000d / 30) };
+    { Interval = TimeSpan.FromMilliseconds(1000d / 30) };
     private LibraryData _library = new();
     private FileSystemWatcher? _watcher;
     private Forms.NotifyIcon? _tray;
@@ -118,8 +118,8 @@ public partial class MainWindow : Window
         _player.Failed += (_, message) => Dispatcher.Invoke(() => SetStatus(message, true));
         _player.AudioLevelChanged += QueueAnimatedIconUpdate;
         _player.TempoEstimated += (trackId, bpm) => Dispatcher.BeginInvoke(() => ApplyEstimatedTempo(trackId, bpm));
-        _player.MotionProfileEstimated += (trackId, danceability, fullnessFloor, fullnessCeiling) =>
-            Dispatcher.BeginInvoke(() => ApplyMotionProfile(trackId, danceability, fullnessFloor, fullnessCeiling));
+        _player.MotionProfileEstimated += (trackId, danceability, fullnessFloor, fullnessCeiling, jumpWindows) =>
+            Dispatcher.BeginInvoke(() => ApplyMotionProfile(trackId, danceability, fullnessFloor, fullnessCeiling, jumpWindows));
         _agent.Activity += (_, activity) => Dispatcher.Invoke(() => AddAgentActivity(activity));
         ChatMessages.ItemsSource = _chat;
         VideoCandidateList.ItemsSource = _videoCandidates;
@@ -708,7 +708,7 @@ public partial class MainWindow : Window
             ? .125
             : Math.Clamp((now - _lastIconFrameAt).TotalSeconds, .025, .5);
         _lastIconFrameAt = now;
-        SetDjFrame(_djIconAnimator.Update(level, true, true, elapsed));
+        SetDjFrame(_djIconAnimator.Update(level, true, true, elapsed, _player.Position.TotalSeconds));
     }
 
     private void ApplyEstimatedTempo(string trackId, double bpm)
@@ -723,10 +723,11 @@ public partial class MainWindow : Window
         _djIconAnimator.SetTempo(bpm);
     }
 
-    private void ApplyMotionProfile(string trackId, double danceability, double fullnessFloor, double fullnessCeiling)
+    private void ApplyMotionProfile(string trackId, double danceability, double fullnessFloor, double fullnessCeiling,
+        IReadOnlyList<JumpWindow> jumpWindows)
     {
         if (_player.CurrentTrack?.Id != trackId) return;
-        _djIconAnimator.SetMotionProfile(danceability, fullnessFloor, fullnessCeiling);
+        _djIconAnimator.SetMotionProfile(danceability, fullnessFloor, fullnessCeiling, jumpWindows);
     }
 
     private void QueueAnimatedIconUpdate(float level) => _pendingAudioLevel = level;
@@ -1581,8 +1582,13 @@ public partial class MainWindow : Window
                     Title = "Recently played",
                     Items = _library.RecentlyPlayed.Take(12).Select(entry => new DiscoveryItem
                     {
-                        Id = entry.Track.Id, Kind = "song", Title = entry.Track.Title, Subtitle = entry.Track.Artist,
-                        ArtworkUrl = entry.Track.ArtworkUrl, Track = entry.Track, CanRemoveFromHistory = true
+                        Id = entry.Track.Id,
+                        Kind = "song",
+                        Title = entry.Track.Title,
+                        Subtitle = entry.Track.Artist,
+                        ArtworkUrl = entry.Track.ArtworkUrl,
+                        Track = entry.Track,
+                        CanRemoveFromHistory = true
                     }).ToList()
                 });
             }
@@ -2001,7 +2007,7 @@ public partial class MainWindow : Window
         foreach (var track in _library.Queue) tracks.Add(track);
         foreach (var favorite in _library.Favorites) tracks.Add(favorite.Track);
         foreach (var saved in _library.SavedQueues)
-        foreach (var track in saved.Tracks) tracks.Add(track);
+            foreach (var track in saved.Tracks) tracks.Add(track);
         foreach (var history in _library.RecentlyPlayed) tracks.Add(history.Track);
         if (SearchResults.ItemsSource is IEnumerable<Track> results)
             foreach (var track in results) tracks.Add(track);

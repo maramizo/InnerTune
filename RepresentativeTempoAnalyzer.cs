@@ -10,6 +10,7 @@ public sealed record TempoAnalysis(
     double PeakLoudness,
     double FullnessFloor,
     double FullnessCeiling,
+    List<JumpWindow> JumpWindows,
     double Danceability,
     DanceMetrics DanceMetrics);
 
@@ -94,11 +95,15 @@ public static class RepresentativeTempoAnalyzer
         }
         if (!tracker.HasEstimate) return null;
         var danceMetrics = MeasureDanceability(tempoFeatures.Full, tempoFeatures.Low, tracker.Bpm);
-        fullnessSamples.AddRange(tempoFeatures.Full);
+        reader.CurrentTime = TimeSpan.Zero;
+        var motionFeatures = ReadEnvelope(samples, reader.WaveFormat, duration, token);
+        fullnessSamples.AddRange(motionFeatures.Full);
         var fullnessFloor = Percentile(fullnessSamples, .20);
         var fullnessCeiling = Percentile(fullnessSamples, .95);
         if (fullnessCeiling - fullnessFloor < .025)
             fullnessCeiling = Math.Min(1, fullnessFloor + .025);
+        var jumpWindows = JumpWindowPlanner.Plan(motionFeatures.Full, EnvelopeSeconds,
+            fullnessFloor, fullnessCeiling, danceMetrics.Score);
         var peakLoudness = Math.Max(
             sampledPeaks.Count == 0 ? 0 : sampledPeaks.Max(),
             tempoFeatures.Full.Count == 0 ? 0 : tempoFeatures.Full.Max());
@@ -110,6 +115,7 @@ public static class RepresentativeTempoAnalyzer
             peakLoudness,
             fullnessFloor,
             fullnessCeiling,
+            jumpWindows,
             danceMetrics.Score,
             danceMetrics);
     }

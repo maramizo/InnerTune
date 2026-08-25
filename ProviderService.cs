@@ -1,7 +1,7 @@
 using System.Diagnostics;
-using System.Text.Json;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 
 namespace InnerTune;
 
@@ -78,9 +78,14 @@ public sealed class ProviderService : IDisposable
         if (!File.Exists(_script)) throw new InvalidOperationException("The InnerTube provider is missing. Run setup.ps1 once.");
         var start = new ProcessStartInfo
         {
-            FileName = RuntimeTools.Node, UseShellExecute = false, RedirectStandardInput = true,
-            RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
+            FileName = RuntimeTools.Node,
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
             WorkingDirectory = Path.GetDirectoryName(_script)!
         };
         start.ArgumentList.Add(_script); start.ArgumentList.Add("serve");

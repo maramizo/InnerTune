@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
+using System.Text.Json;
 using System.Windows.Threading;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
@@ -38,7 +39,7 @@ public sealed class PlayerService : IDisposable
     public event EventHandler<string>? Failed;
     public event Action<float>? AudioLevelChanged;
     public event Action<string, double>? TempoEstimated;
-    public event Action<string, double, double, double>? MotionProfileEstimated;
+    public event Action<string, double, double, double, IReadOnlyList<JumpWindow>>? MotionProfileEstimated;
     public Track? CurrentTrack => _currentTrack;
     public int CurrentIndex => _index;
     public bool IsPlaying => _playing;
@@ -321,7 +322,9 @@ public sealed class PlayerService : IDisposable
             var start = new ProcessStartInfo
             {
                 FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "curl.exe"),
-                UseShellExecute = false, RedirectStandardError = true, CreateNoWindow = true
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                CreateNoWindow = true
             };
             foreach (var argument in new[] { "--fail", "--location", "--silent", "--show-error", "--range", "0-", "--connect-timeout", "15", "--max-time", "180", "--output", temporary, url })
                 start.ArgumentList.Add(argument);
@@ -333,8 +336,10 @@ public sealed class PlayerService : IDisposable
             if (process.ExitCode != 0) throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? "Audio download failed." : error.Trim());
             var remux = new ProcessStartInfo
             {
-                FileName = RuntimeTools.Ffmpeg, UseShellExecute = false,
-                RedirectStandardError = true, CreateNoWindow = true
+                FileName = RuntimeTools.Ffmpeg,
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                CreateNoWindow = true
             };
             foreach (var argument in new[] { "-hide_banner", "-loglevel", "error", "-y", "-i", temporary, "-map", "0:a:0", "-c", "copy", "-movflags", "+faststart", path })
                 remux.ArgumentList.Add(argument);
@@ -364,7 +369,8 @@ public sealed class PlayerService : IDisposable
         if (_tempoCache.TryGetValue(trackId, out var cached))
         {
             TempoEstimated?.Invoke(trackId, cached.Bpm);
-            MotionProfileEstimated?.Invoke(trackId, cached.Danceability, cached.FullnessFloor, cached.FullnessCeiling);
+            MotionProfileEstimated?.Invoke(trackId, cached.Danceability, cached.FullnessFloor,
+                cached.FullnessCeiling, cached.JumpWindows);
             return;
         }
         var cancellation = new CancellationTokenSource();
@@ -377,13 +383,20 @@ public sealed class PlayerService : IDisposable
         try
         {
             await Task.Delay(750, cancellation.Token);
-            var analysis = await RepresentativeTempoAnalyzer.AnalyzeAsync(source, cancellation.Token);
+            var analysis = await LoadTempoAnalysisAsync(trackId, source, cancellation.Token);
+            if (analysis is null)
+            {
+                analysis = await RepresentativeTempoAnalyzer.AnalyzeAsync(source, cancellation.Token);
+                if (analysis is not null)
+                    await SaveTempoAnalysisAsync(trackId, source, analysis, cancellation.Token);
+            }
             if (analysis is null || cancellation.IsCancellationRequested) return;
             _tempoCache[trackId] = analysis;
             if (_currentTrack?.Id == trackId)
             {
                 TempoEstimated?.Invoke(trackId, analysis.Bpm);
-                MotionProfileEstimated?.Invoke(trackId, analysis.Danceability, analysis.FullnessFloor, analysis.FullnessCeiling);
+                MotionProfileEstimated?.Invoke(trackId, analysis.Danceability, analysis.FullnessFloor,
+                    analysis.FullnessCeiling, analysis.JumpWindows);
             }
         }
         catch (OperationCanceledException) { }
@@ -393,6 +406,35 @@ public sealed class PlayerService : IDisposable
             if (ReferenceEquals(_tempoCancel, cancellation)) _tempoCancel = null;
             cancellation.Dispose();
         }
+    }
+
+    private string TempoAnalysisPath(string trackId) => Path.Combine(_audioCache, $"{trackId}.motion-v3.json");
+
+    private async Task<TempoAnalysis?> LoadTempoAnalysisAsync(string trackId, string source, CancellationToken token)
+    {
+        try
+        {
+            var sourceInfo = new FileInfo(source);
+            var cached = JsonSerializer.Deserialize<CachedTempoAnalysis>(
+                await File.ReadAllTextAsync(TempoAnalysisPath(trackId), token));
+            return cached is not null && cached.SourceLength == sourceInfo.Length &&
+                cached.SourceLastWriteUtcTicks == sourceInfo.LastWriteTimeUtc.Ticks
+                ? cached.Analysis
+                : null;
+        }
+        catch { return null; }
+    }
+
+    private async Task SaveTempoAnalysisAsync(string trackId, string source, TempoAnalysis analysis, CancellationToken token)
+    {
+        try
+        {
+            var sourceInfo = new FileInfo(source);
+            var cached = new CachedTempoAnalysis(sourceInfo.Length, sourceInfo.LastWriteTimeUtc.Ticks, analysis);
+            await File.WriteAllTextAsync(TempoAnalysisPath(trackId), JsonSerializer.Serialize(cached), token);
+        }
+        catch (OperationCanceledException) { throw; }
+        catch { }
     }
 
     private void TrimAudioCache()
@@ -416,6 +458,8 @@ public sealed class PlayerService : IDisposable
         try { process.PriorityClass = ProcessPriorityClass.BelowNormal; }
         catch { }
     }
+
+    private sealed record CachedTempoAnalysis(long SourceLength, long SourceLastWriteUtcTicks, TempoAnalysis Analysis);
 
     private static string FriendlyPlaybackError(Exception error) =>
         error.Message.Contains("0x88890008", StringComparison.OrdinalIgnoreCase)

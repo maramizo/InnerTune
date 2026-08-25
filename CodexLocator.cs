@@ -1,5 +1,5 @@
-using Microsoft.Win32;
 using System.IO;
+using Microsoft.Win32;
 
 namespace InnerTune;
 
@@ -145,21 +145,21 @@ public static class CodexLocator
     {
         const string key = @"Software\Microsoft\Windows\CurrentVersion\App Paths\codex.exe";
         foreach (var hive in new[] { RegistryHive.CurrentUser, RegistryHive.LocalMachine })
-        foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
-        {
-            RegistryKey? baseKey = null;
-            RegistryKey? appKey = null;
-            try
+            foreach (var view in new[] { RegistryView.Registry64, RegistryView.Registry32 })
             {
-                baseKey = RegistryKey.OpenBaseKey(hive, view);
-                appKey = baseKey.OpenSubKey(key);
-                if (appKey?.GetValue(null) is string value && !string.IsNullOrWhiteSpace(value)) yield return value;
+                RegistryKey? baseKey = null;
+                RegistryKey? appKey = null;
+                try
+                {
+                    baseKey = RegistryKey.OpenBaseKey(hive, view);
+                    appKey = baseKey.OpenSubKey(key);
+                    if (appKey?.GetValue(null) is string value && !string.IsNullOrWhiteSpace(value)) yield return value;
+                }
+                finally
+                {
+                    appKey?.Dispose();
+                    baseKey?.Dispose();
+                }
             }
-            finally
-            {
-                appKey?.Dispose();
-                baseKey?.Dispose();
-            }
-        }
     }
 }

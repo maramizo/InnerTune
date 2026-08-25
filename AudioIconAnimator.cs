@@ -8,6 +8,7 @@ public sealed class AudioIconAnimator
     public const int FrameCount = JumpFrameOffset + PhaseCount;
     public const double JumpStartThreshold = .62;
     public const double JumpStopThreshold = .44;
+    public const double FullnessExponent = 4.2;
 
     private float _envelope;
     private float _reference = .08f;
@@ -25,11 +26,14 @@ public sealed class AudioIconAnimator
     private float _fullnessFloor = .04f;
     private float _fullnessCeiling = .18f;
     private double _danceability;
+    private IReadOnlyList<JumpWindow> _jumpWindows = [];
+    private bool _hasJumpPlan;
 
     public double EstimatedBpm => _bpm;
     public bool HasTempoEstimate { get; private set; }
 
-    public int Update(float level, bool playing, bool enabled, double elapsedSeconds = .125)
+    public int Update(float level, bool playing, bool enabled, double elapsedSeconds = .125,
+        double? playbackPositionSeconds = null)
     {
         if (!playing || !enabled)
         {
@@ -54,12 +58,17 @@ public sealed class AudioIconAnimator
         var fullnessRange = Math.Max(.025f, _fullnessCeiling - _fullnessFloor);
         var relativeFullness = Math.Clamp((_sustainedLoudness - _fullnessFloor) / fullnessRange, 0, 1);
         var raveCharacter = SmoothStep(.42, .72, _danceability);
-        var raveEnergy = raveCharacter * Math.Pow(relativeFullness, 4.2);
-        if (!_jumpRequested && raveEnergy >= JumpStartThreshold) _jumpRequested = true;
-        else if (_jumpRequested && raveEnergy <= JumpStopThreshold) _jumpRequested = false;
+        var raveEnergy = raveCharacter * Math.Pow(relativeFullness, FullnessExponent);
+        if (_hasJumpPlan && playbackPositionSeconds is { } playbackPosition)
+            _jumpRequested = _jumpWindows.Any(window => window.Contains(playbackPosition));
+        else
+        {
+            if (!_jumpRequested && raveEnergy >= JumpStartThreshold) _jumpRequested = true;
+            else if (_jumpRequested && raveEnergy <= JumpStopThreshold) _jumpRequested = false;
+        }
 
         var strengthMarker = (long)Math.Floor(_phase / (PhaseCount / 4d));
-        if (strengthMarker != _lastStrengthMarker)
+        if (!_activeJump && strengthMarker != _lastStrengthMarker)
         {
             // A hand-motion bank may change only at one of the four crossover
             // markers in a full gesture. This keeps loudness reactive without
@@ -74,7 +83,7 @@ public sealed class AudioIconAnimator
             var enterJump = !_activeJump && _jumpRequested &&
                 (_jumpEndedMarker == long.MinValue || jumpMarker - _jumpEndedMarker >= 2);
             var leaveJump = _activeJump && !_jumpRequested &&
-                jumpMarker - _jumpStartedMarker >= 2;
+                jumpMarker - _jumpStartedMarker >= MinimumJumpMarkers();
             if (enterJump || leaveJump)
             {
                 // A delayed Windows tick can cross a marker. Render the actual
@@ -82,16 +91,21 @@ public sealed class AudioIconAnimator
                 _phase = jumpMarker * (PhaseCount / 2d);
                 _activeJump = enterJump;
                 if (enterJump) _jumpStartedMarker = jumpMarker;
-                else _jumpEndedMarker = jumpMarker;
+                else
+                {
+                    _jumpEndedMarker = jumpMarker;
+                    _activeAmplitudeLevel = _pendingAmplitudeLevel;
+                    _lastStrengthMarker = strengthMarker;
+                }
             }
             _lastJumpMarker = jumpMarker;
         }
 
         var phase = (int)Math.Floor(_phase % PhaseCount);
-        var frame = _activeAmplitudeLevel <= 0
-            ? 0
-            : _activeJump
-                ? EncodeJump(phase)
+        var frame = _activeJump
+            ? EncodeJump(phase)
+            : _activeAmplitudeLevel <= 0
+                ? 0
                 : Encode(_activeAmplitudeLevel, phase);
 
         // One complete gesture spans two beats. Twenty-four poses at the
@@ -111,11 +125,14 @@ public sealed class AudioIconAnimator
         HasTempoEstimate = true;
     }
 
-    public void SetMotionProfile(double danceability, double fullnessFloor, double fullnessCeiling)
+    public void SetMotionProfile(double danceability, double fullnessFloor, double fullnessCeiling,
+        IReadOnlyList<JumpWindow>? jumpWindows = null)
     {
         _danceability = Math.Clamp(danceability, 0, 1);
         _fullnessFloor = (float)Math.Clamp(fullnessFloor, 0, .95);
         _fullnessCeiling = (float)Math.Clamp(fullnessCeiling, _fullnessFloor + .025f, 1);
+        _jumpWindows = jumpWindows ?? [];
+        _hasJumpPlan = jumpWindows is not null;
     }
 
     public void Reset()
@@ -141,6 +158,8 @@ public sealed class AudioIconAnimator
         _fullnessFloor = .04f;
         _fullnessCeiling = .18f;
         _danceability = 0;
+        _jumpWindows = [];
+        _hasJumpPlan = false;
         HasTempoEstimate = false;
     }
 
@@ -171,6 +190,9 @@ public sealed class AudioIconAnimator
     public static bool IsStrengthMarker(int phase) => phase % (PhaseCount / 4) == 0;
 
     public static bool IsJumpMarker(int phase) => phase % (PhaseCount / 2) == 0;
+
+    private long MinimumJumpMarkers() => Math.Max(2, (long)Math.Ceiling(
+        JumpWindowPlanner.MinimumJumpSeconds * _bpm / 60));
 
     private static double SmoothStep(double low, double high, double value)
     {

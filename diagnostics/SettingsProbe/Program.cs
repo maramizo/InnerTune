@@ -114,6 +114,16 @@ var denseRockLowEnvelope = Enumerable.Range(0, 96)
 var denseRockScore = RepresentativeTempoAnalyzer.EstimateDanceability(denseRockEnvelope, denseRockLowEnvelope, 120);
 var raveClassificationWorks = danceScore >= .58 && denseRockScore >= .58 &&
     pianoScore <= .45 && danceScore > pianoScore + .25 && denseRockScore > pianoScore + .20;
+var shortFullnessPlan = JumpWindowPlanner.Plan(Enumerable.Repeat(.90f, 32).ToArray(), .125, .10, .70, 1);
+var sustainedFullnessPlan = JumpWindowPlanner.Plan(Enumerable.Repeat(.90f, 80).ToArray(), .125, .10, .70, 1);
+var predictiveJumpPlanningWorks = shortFullnessPlan.Count == 0 && sustainedFullnessPlan.Count == 1 &&
+    sustainedFullnessPlan[0].DurationSeconds >= JumpWindowPlanner.MinimumJumpSeconds;
+var exclusiveJumpAnimator = new AudioIconAnimator();
+exclusiveJumpAnimator.SetTempo(120);
+exclusiveJumpAnimator.SetMotionProfile(1, .10, .70, [new JumpWindow(0, 10)]);
+var jumpPoseIgnoresHandIntensity = Enumerable.Range(0, 180)
+    .Select(index => exclusiveJumpAnimator.Update(index == 0 ? .90f : 0, true, true, 1d / 30, index / 30d))
+    .All(AudioIconAnimator.IsJumpFrame);
 static (double Bpm, int PhaseChanges, bool Locked, bool Stable) AnalyzeTempo(double bpm)
 {
     var tracker = new BeatTempoTracker();
@@ -250,12 +260,17 @@ finally
     if (Directory.Exists(playbackRoot)) Directory.Delete(playbackRoot, true);
 }
 var inspectedTracks = new List<object>();
+var motionAnalysisSerializationWorks = true;
 foreach (var inspectedPath in args.Where(File.Exists))
 {
     var inspectedAnalysis = await RepresentativeTempoAnalyzer.AnalyzeAsync(inspectedPath);
     double? inspectedJumpCoverage = null;
     if (inspectedAnalysis is not null)
     {
+        var roundTrippedAnalysis = JsonSerializer.Deserialize<TempoAnalysis>(
+            JsonSerializer.Serialize(inspectedAnalysis));
+        motionAnalysisSerializationWorks &= roundTrippedAnalysis is not null &&
+            roundTrippedAnalysis.JumpWindows.SequenceEqual(inspectedAnalysis.JumpWindows);
         using var inspectedReader = new MediaFoundationReader(inspectedPath);
         var inspectedMeter = new RmsMeteringSampleProvider(
             inspectedReader.ToSampleProvider(),
@@ -263,7 +278,7 @@ foreach (var inspectedPath in args.Where(File.Exists))
         var inspectedAnimator = new AudioIconAnimator();
         inspectedAnimator.SetTempo(inspectedAnalysis.Bpm);
         inspectedAnimator.SetMotionProfile(inspectedAnalysis.Danceability,
-            inspectedAnalysis.FullnessFloor, inspectedAnalysis.FullnessCeiling);
+            inspectedAnalysis.FullnessFloor, inspectedAnalysis.FullnessCeiling, inspectedAnalysis.JumpWindows);
         var inspectedFrames = 0;
         var inspectedJumpFrames = 0;
         var inspectedMotionTransitions = 0;
@@ -273,7 +288,7 @@ foreach (var inspectedPath in args.Where(File.Exists))
         bool? inspectedPriorJump = null;
         inspectedMeter.LoudnessAvailable += loudness =>
         {
-            var frame = inspectedAnimator.Update(loudness, true, true, 1d / 30);
+            var frame = inspectedAnimator.Update(loudness, true, true, 1d / 30, inspectedFrames / 30d);
             var jumping = AudioIconAnimator.IsJumpFrame(frame);
             if (inspectedPriorJump is { } priorJump && priorJump != jumping)
             {
@@ -303,7 +318,7 @@ foreach (var inspectedPath in args.Where(File.Exists))
     }
     inspectedTracks.Add(new { path = inspectedPath, analysis = inspectedAnalysis, jumpCoverage = inspectedJumpCoverage });
 }
-var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && delayedTickCatchesUp && choreographyMarkersWork && offBeatLandingStillJumps && pianoDoesNotJump && raveClassificationWorks && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
+var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && delayedTickCatchesUp && choreographyMarkersWork && offBeatLandingStillJumps && pianoDoesNotJump && raveClassificationWorks && predictiveJumpPlanningWorks && jumpPoseIgnoresHandIntensity && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks && motionAnalysisSerializationWorks;
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed,
@@ -318,6 +333,8 @@ Console.WriteLine(JsonSerializer.Serialize(new
     offBeatLandingStillJumps,
     pianoDoesNotJump,
     raveClassificationWorks,
+    predictiveJumpPlanningWorks,
+    jumpPoseIgnoresHandIntensity,
     danceScore,
     denseRockScore,
     pianoScore,
@@ -337,6 +354,7 @@ Console.WriteLine(JsonSerializer.Serialize(new
     pathMergeWorks,
     installerEnvironmentWorks,
     playbackStoreWorks,
+    motionAnalysisSerializationWorks,
     inspectedTracks,
     autoResumeDefault = new AppSettings().AutoResumeOnStart,
     optInResumesPlaying = optInResumesOnlyPlaying
