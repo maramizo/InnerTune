@@ -256,6 +256,7 @@ public partial class MainWindow : Window
         foreach (var favorite in _library.Favorites) favorite.FolderPath = JoinFolderPath(favorite.FolderId, "Favorites");
         SavedQueueList.ItemsSource = _library.SavedQueues;
         FavoritesList.ItemsSource = _library.Favorites;
+        RefreshFavoriteStates();
         FavoritesEmpty.Visibility = _library.Favorites.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         FavoritesList.Visibility = _library.Favorites.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         SavedQueuesEmpty.Visibility = _library.SavedQueues.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -388,6 +389,7 @@ public partial class MainWindow : Window
         {
             var results = await _provider.SearchAsync(query);
             SearchResults.ItemsSource = results;
+            RefreshFavoriteStates();
             SearchEmpty.Visibility = results.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             SetStatus(results.Count == 0 ? "No songs found" : $"Found {results.Count} songs");
         }
@@ -1105,6 +1107,7 @@ public partial class MainWindow : Window
             }
             sections.AddRange(discovery.Sections.Where(section => section.Items.Count > 0));
             HomeSections.ItemsSource = sections;
+            RefreshFavoriteStates();
             MoodChips.ItemsSource = discovery.Moods;
             MoodArea.Visibility = mood is null && discovery.Moods.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             HomeError.Visibility = sections.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -1232,6 +1235,7 @@ public partial class MainWindow : Window
             CollectionCount.Text = detail.CountText;
             SetImage(CollectionArtwork, detail.ArtworkUrl ?? item.ArtworkUrl);
             CollectionTrackList.ItemsSource = detail.Tracks;
+            RefreshFavoriteStates();
             CollectionTrackList.Visibility = detail.Tracks.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             CollectionEmpty.Visibility = detail.Tracks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
             CollectionEmptyText.Text = detail.Tracks.Count == 0 ? "No playable songs found" : "";
@@ -1359,12 +1363,49 @@ public partial class MainWindow : Window
         _library.Queue.Remove(track); MarkQueueEdited(); await SaveAsync(); SetStatus($"Removed {track.Title}");
     }
 
-    private async void FavoriteQueue_Click(object sender, RoutedEventArgs e)
+    private async void FavoriteTrack_Click(object sender, RoutedEventArgs e)
     {
-        if ((sender as FrameworkElement)?.DataContext is not Track track) return;
+        e.Handled = true;
+        var track = (sender as FrameworkElement)?.DataContext switch
+        {
+            Track direct => direct,
+            DiscoveryItem { Track: { } discovered } => discovered,
+            _ => null
+        };
+        if (track is null) return;
         var existing = _library.Favorites.FirstOrDefault(x => x.Track.Id == track.Id);
-        if (existing is null) _library.Favorites.Add(new() { Track = track });
-        await SaveAsync(); SetStatus($"Liked {track.Title}");
+        if (existing is null)
+        {
+            _library.Favorites.Add(new() { Track = track });
+            await SaveAsync();
+            SetStatus($"Liked {track.Title}");
+        }
+        else
+        {
+            _library.Favorites.Remove(existing);
+            await SaveAsync();
+            SetStatus($"Removed {track.Title} from liked songs");
+        }
+    }
+
+    private void RefreshFavoriteStates()
+    {
+        var favoriteIds = _library.Favorites.Select(item => item.Track.Id).ToHashSet(StringComparer.Ordinal);
+        var tracks = new HashSet<Track>();
+        foreach (var track in _library.Queue) tracks.Add(track);
+        foreach (var favorite in _library.Favorites) tracks.Add(favorite.Track);
+        foreach (var saved in _library.SavedQueues)
+        foreach (var track in saved.Tracks) tracks.Add(track);
+        foreach (var history in _library.RecentlyPlayed) tracks.Add(history.Track);
+        if (SearchResults.ItemsSource is IEnumerable<Track> results)
+            foreach (var track in results) tracks.Add(track);
+        if (HomeSections.ItemsSource is IEnumerable<DiscoverySection> sections)
+            foreach (var item in sections.SelectMany(section => section.Items))
+                if (item.Track is { } track) tracks.Add(track);
+        if (_collectionDetail is { } collection)
+            foreach (var track in collection.Tracks) tracks.Add(track);
+        if (_player.CurrentTrack is { } current) tracks.Add(current);
+        foreach (var track in tracks) track.IsFavorite = favoriteIds.Contains(track.Id);
     }
 
     private async void ClearQueue_Click(object sender, RoutedEventArgs e)

@@ -118,11 +118,12 @@
                                     <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0">
                                       <Button Content="{Binding PrimaryAction}" Padding="12,5" Click="DiscoveryPrimary_Click"/>
                                       <Button x:Name="AddDiscoveryButton" Content="+" Style="{StaticResource IconButton}" Width="28" Height="28" Margin="4,0,0,0" ToolTip="Add to queue" Click="AddDiscovery_Click" Visibility="Collapsed"/>
+                                      <Button x:Name="FavoriteDiscoveryButton" DataContext="{Binding Track}" Style="{StaticResource FavoriteButton}" Width="28" Height="28" Margin="2,0,0,0" Click="FavoriteTrack_Click" Visibility="Collapsed"/>
                                       <Button x:Name="RemoveHistoryButton" Content="×" Style="{StaticResource IconButton}" Width="28" Height="28" ToolTip="Remove from recently played" Click="RemoveRecent_Click" Visibility="Collapsed"/>
                                     </StackPanel>
                                   </Grid>
                                 </Border>
-                                <DataTemplate.Triggers><DataTrigger Binding="{Binding Kind}" Value="song"><Setter TargetName="AddDiscoveryButton" Property="Visibility" Value="Visible"/></DataTrigger><DataTrigger Binding="{Binding CanRemoveFromHistory}" Value="True"><Setter TargetName="RemoveHistoryButton" Property="Visibility" Value="Visible"/></DataTrigger></DataTemplate.Triggers>
+                                <DataTemplate.Triggers><DataTrigger Binding="{Binding Kind}" Value="song"><Setter TargetName="AddDiscoveryButton" Property="Visibility" Value="Visible"/><Setter TargetName="FavoriteDiscoveryButton" Property="Visibility" Value="Visible"/></DataTrigger><DataTrigger Binding="{Binding CanRemoveFromHistory}" Value="True"><Setter TargetName="RemoveHistoryButton" Property="Visibility" Value="Visible"/></DataTrigger></DataTemplate.Triggers>
                               </DataTemplate></ItemsControl.ItemTemplate>
                             </ItemsControl>
                           </ScrollViewer>
@@ -156,12 +157,13 @@
                       <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}"><Setter Property="Cursor" Value="Hand"/></Style></ListBox.ItemContainerStyle>
                       <ListBox.ItemTemplate><DataTemplate>
                         <Grid Height="58" Margin="8,0">
-                          <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="46"/><ColumnDefinition Width="*"/><ColumnDefinition Width="48"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="46"/><ColumnDefinition Width="*"/><ColumnDefinition Width="48"/><ColumnDefinition Width="34"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
                           <TextBlock Text="{Binding Number}" Foreground="#777480" FontSize="9" VerticalAlignment="Center"/>
                           <Border Grid.Column="1" Width="38" Height="38" CornerRadius="6" Background="#292830"><Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/></Border>
                           <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="9,0"><TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="11" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" Foreground="{StaticResource TextMuted}" FontSize="9" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/></StackPanel>
                           <TextBlock Grid.Column="3" Text="{Binding DurationText}" Foreground="#777480" FontSize="9" VerticalAlignment="Center" HorizontalAlignment="Right"/>
-                          <Button Grid.Column="4" Style="{StaticResource IconButton}" Content="+" Width="28" Height="28" ToolTip="Add to queue" Click="AddCollectionTrack_Click"/>
+                          <Button Grid.Column="4" Style="{StaticResource FavoriteButton}" Width="28" Height="28" Click="FavoriteTrack_Click"/>
+                          <Button Grid.Column="5" Style="{StaticResource IconButton}" Content="+" Width="28" Height="28" ToolTip="Add to queue" Click="AddCollectionTrack_Click"/>
                         </Grid>
                       </DataTemplate>
                       </ListBox.ItemTemplate>
@@ -190,15 +192,16 @@
                 <ListBox x:Name="SearchResults" MouseDoubleClick="SearchResults_DoubleClick">
                   <ListBox.ItemTemplate><DataTemplate>
                     <Grid Height="70" Margin="10,0">
-                      <Grid.ColumnDefinitions><ColumnDefinition Width="62"/><ColumnDefinition Width="*"/><ColumnDefinition Width="54"/><ColumnDefinition Width="58"/><ColumnDefinition Width="68"/></Grid.ColumnDefinitions>
+                      <Grid.ColumnDefinitions><ColumnDefinition Width="62"/><ColumnDefinition Width="*"/><ColumnDefinition Width="54"/><ColumnDefinition Width="34"/><ColumnDefinition Width="58"/><ColumnDefinition Width="68"/></Grid.ColumnDefinitions>
                       <Border Width="50" Height="50" CornerRadius="7" Background="#2C2A32" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/></Border>
                       <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                         <TextBlock Text="{Binding Subtitle}" FontSize="10" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,4,8,0"/>
                       </StackPanel>
                       <TextBlock Grid.Column="2" Text="{Binding DurationText}" Foreground="#85828D" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="10"/>
-                      <Button Grid.Column="3" Content="Play" Background="Transparent" Padding="8,5" Click="PlayResult_Click"/>
-                      <Button Grid.Column="4" Content="Add" Padding="10,5" Click="AddResult_Click"/>
+                      <Button Grid.Column="3" Style="{StaticResource FavoriteButton}" Width="30" Height="30" Click="FavoriteTrack_Click"/>
+                      <Button Grid.Column="4" Content="Play" Background="Transparent" Padding="8,5" Click="PlayResult_Click"/>
+                      <Button Grid.Column="5" Content="Add" Padding="10,5" Click="AddResult_Click"/>
                     </Grid>
                   </DataTemplate></ListBox.ItemTemplate>
                 </ListBox>
@@ -259,7 +262,7 @@
                 <TabControl.Template><ControlTemplate TargetType="TabControl"><ContentPresenter Content="{TemplateBinding SelectedContent}" ContentTemplate="{TemplateBinding SelectedContentTemplate}"/></ControlTemplate></TabControl.Template>
                 <TabItem Header="Liked songs">
                   <Grid>
-                  <StackPanel x:Name="FavoritesEmpty" VerticalAlignment="Center" Margin="0,0,0,60"><TextBlock Text="No liked songs yet" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Use the heart beside a queued song to keep it here." Foreground="{StaticResource TextMuted}" Margin="0,7,0,0" HorizontalAlignment="Center"/></StackPanel>
+                  <StackPanel x:Name="FavoritesEmpty" VerticalAlignment="Center" Margin="0,0,0,60"><TextBlock Text="No liked songs yet" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Use the heart beside any song to keep it here." Foreground="{StaticResource TextMuted}" Margin="0,7,0,0" HorizontalAlignment="Center"/></StackPanel>
                   <ListBox x:Name="FavoritesList" Margin="0,12,0,0">
                     <ListBox.ItemTemplate><DataTemplate><Grid Height="62" Margin="10,0"><Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="62"/><ColumnDefinition Width="86"/></Grid.ColumnDefinitions><Border Width="42" Height="42" CornerRadius="7" Background="#2C2A32"><Image Source="{Binding Track.ArtworkUrl}" Stretch="UniformToFill"/></Border><StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding Track.Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Track.Artist}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding FolderPath}" Foreground="#777580" FontSize="9"/></StackPanel><Button Grid.Column="2" Content="Add" Margin="4" Click="AddFavorite_Click"/><Button Grid.Column="3" Content="Remove" Background="Transparent" Margin="4" Click="Unfavorite_Click"/></Grid></DataTemplate></ListBox.ItemTemplate>
                   </ListBox>
@@ -300,10 +303,11 @@
                             <ListBox.ItemTemplate><DataTemplate>
                               <Border Height="48" Padding="6,0" CornerRadius="7" Cursor="Hand" Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListBox}}" MouseLeftButtonUp="SavedTrack_Click">
                                 <Grid>
-                                  <Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>
+                                  <Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/><ColumnDefinition Width="34"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>
                                   <Border Width="34" Height="34" CornerRadius="5" Background="#292830" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/></Border>
                                   <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,8,0"><TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" FontSize="9" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/></StackPanel>
-                                  <TextBlock Grid.Column="2" Text="{Binding DurationText}" Foreground="#85818D" FontSize="9" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                  <Button Grid.Column="2" Style="{StaticResource FavoriteButton}" Width="28" Height="28" Click="FavoriteTrack_Click"/>
+                                  <TextBlock Grid.Column="3" Text="{Binding DurationText}" Foreground="#85818D" FontSize="9" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                                 </Grid>
                               </Border>
                             </DataTemplate></ListBox.ItemTemplate>
@@ -414,7 +418,7 @@
                       <Grid.ColumnDefinitions><ColumnDefinition Width="46"/><ColumnDefinition Width="*"/><ColumnDefinition Width="34"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
                       <Border Width="40" Height="40" CornerRadius="6" Background="#2C2A32" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/></Border>
                       <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="3,0,7,0"><TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" FontSize="9" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/></StackPanel>
-                      <Button Grid.Column="2" Style="{StaticResource IconButton}" Width="30" Height="30" Content="♡" ToolTip="Like song" Click="FavoriteQueue_Click"/>
+                      <Button Grid.Column="2" Style="{StaticResource FavoriteButton}" Width="30" Height="30" Click="FavoriteTrack_Click"/>
                       <Button Grid.Column="3" Style="{StaticResource IconButton}" Width="30" Height="30" Content="×" ToolTip="Remove" Click="RemoveQueue_Click"/>
                     </Grid>
                   </DataTemplate></ListBox.ItemTemplate>

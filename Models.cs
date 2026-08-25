@@ -7,6 +7,8 @@ namespace InnerTune;
 
 public sealed class Track : INotifyPropertyChanged
 {
+    private bool _isFavorite;
+
     public string Id { get; set; } = "";
     public string Title { get; set; } = "Unknown title";
     public string Artist { get; set; } = "Unknown artist";
@@ -17,8 +19,30 @@ public sealed class Track : INotifyPropertyChanged
     [JsonIgnore] public string Number { get; set; } = "";
     [JsonIgnore] public string Subtitle => string.IsNullOrWhiteSpace(Album) ? Artist : $"{Artist}  ·  {Album}";
     [JsonIgnore] public bool IsPlaying { get; set; }
+    [JsonIgnore]
+    public bool IsFavorite
+    {
+        get => _isFavorite;
+        set
+        {
+            if (_isFavorite == value) return;
+            _isFavorite = value;
+            PropertyChanged?.Invoke(this, new(nameof(IsFavorite)));
+            PropertyChanged?.Invoke(this, new(nameof(FavoriteGlyph)));
+            PropertyChanged?.Invoke(this, new(nameof(FavoriteTooltip)));
+        }
+    }
+    [JsonIgnore] public string FavoriteGlyph => IsFavorite ? "♥" : "♡";
+    [JsonIgnore] public string FavoriteTooltip => IsFavorite ? "Unlike song" : "Like song";
     public event PropertyChangedEventHandler? PropertyChanged;
-    public void Refresh() { PropertyChanged?.Invoke(this, new(nameof(Number))); PropertyChanged?.Invoke(this, new(nameof(IsPlaying))); }
+    public void Refresh()
+    {
+        PropertyChanged?.Invoke(this, new(nameof(Number)));
+        PropertyChanged?.Invoke(this, new(nameof(IsPlaying)));
+        PropertyChanged?.Invoke(this, new(nameof(IsFavorite)));
+        PropertyChanged?.Invoke(this, new(nameof(FavoriteGlyph)));
+        PropertyChanged?.Invoke(this, new(nameof(FavoriteTooltip)));
+    }
 }
 
 public sealed class LibraryFolder

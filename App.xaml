@@ -58,6 +58,15 @@
     <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
       <Setter Property="Width" Value="32"/><Setter Property="Height" Value="30"/><Setter Property="Padding" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="FontSize" Value="15"/>
     </Style>
+    <Style x:Key="FavoriteButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
+      <Setter Property="Content" Value="{Binding FavoriteGlyph}"/>
+      <Setter Property="ToolTip" Value="{Binding FavoriteTooltip}"/>
+      <Setter Property="AutomationProperties.Name" Value="{Binding FavoriteTooltip}"/>
+      <Setter Property="Foreground" Value="#B6B2BE"/>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsFavorite}" Value="True"><Setter Property="Foreground" Value="#C9B5FF"/></DataTrigger>
+      </Style.Triggers>
+    </Style>
     <Style x:Key="ScrollPageButton" TargetType="RepeatButton">
       <Setter Property="Focusable" Value="False"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></Setter.Value></Setter>
