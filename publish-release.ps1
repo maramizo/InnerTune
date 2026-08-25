@@ -14,8 +14,20 @@ $tag = "v$version"
 $installer = Join-Path $ArtifactDirectory "InnerTune-Setup-$version.exe"
 $checksum = "$installer.sha256"
 
-if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required to publish a release.' }
-gh auth status | Out-Null
+$nativeGh = Get-Command gh -ErrorAction SilentlyContinue
+$useWslGh = $false
+if (-not $nativeGh -and (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
+    wsl.exe sh -lc 'command -v gh >/dev/null 2>&1'
+    $useWslGh = $LASTEXITCODE -eq 0
+}
+if (-not $nativeGh -and -not $useWslGh) { throw 'GitHub CLI (gh) is required in Windows or WSL to publish a release.' }
+
+function Invoke-GitHubCli([string[]]$Arguments) {
+    if ($useWslGh) { & wsl.exe gh @Arguments }
+    else { & $nativeGh.Source @Arguments }
+}
+
+Invoke-GitHubCli @('auth', 'status') | Out-Null
 if (-not $SkipBuild) {
     & (Join-Path $PSScriptRoot 'build-installer.ps1') -OutputDirectory $ArtifactDirectory
     if ($LASTEXITCODE -ne 0) { throw "Installer build failed with exit code $LASTEXITCODE." }
@@ -25,17 +37,20 @@ if (-not (Test-Path $installer)) { throw "Installer not found: $installer" }
 $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $(Split-Path $installer -Leaf)" | Set-Content $checksum -Encoding ascii -NoNewline
 $assets = @($installer, $checksum)
+$publishAssets = if ($useWslGh) {
+    @($assets | ForEach-Object { (wsl.exe wslpath -a $_).Trim() })
+} else { $assets }
 
-gh release view $tag --repo $Repository *> $null
+Invoke-GitHubCli @('release', 'view', $tag, '--repo', $Repository) *> $null
 if ($LASTEXITCODE -eq 0) {
-    gh release upload $tag @assets --repo $Repository --clobber
+    Invoke-GitHubCli (@('release', 'upload', $tag) + $publishAssets + @('--repo', $Repository, '--clobber'))
 }
 else {
-    $arguments = @('release', 'create', $tag) + $assets + @('--repo', $Repository, '--target', 'main', '--title', "InnerTune $version")
+    $arguments = @('release', 'create', $tag) + $publishAssets + @('--repo', $Repository, '--target', 'main', '--title', "InnerTune $version")
     if ($Draft) { $arguments += '--draft' }
     if ([string]::IsNullOrWhiteSpace($Notes)) { $arguments += '--generate-notes' }
     else { $arguments += @('--notes', $Notes) }
-    & gh @arguments
+    Invoke-GitHubCli $arguments
 }
 if ($LASTEXITCODE -ne 0) { throw "GitHub release publishing failed with exit code $LASTEXITCODE." }
 
