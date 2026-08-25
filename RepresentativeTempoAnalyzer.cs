@@ -103,7 +103,7 @@ public static class RepresentativeTempoAnalyzer
         if (fullnessCeiling - fullnessFloor < .025)
             fullnessCeiling = Math.Min(1, fullnessFloor + .025);
         var jumpWindows = JumpWindowPlanner.Plan(motionFeatures.Full, EnvelopeSeconds,
-            fullnessFloor, fullnessCeiling, danceMetrics.Score);
+            fullnessFloor, fullnessCeiling, danceMetrics);
         var peakLoudness = Math.Max(
             sampledPeaks.Count == 0 ? 0 : sampledPeaks.Max(),
             tempoFeatures.Full.Count == 0 ? 0 : tempoFeatures.Full.Max());

@@ -408,7 +408,7 @@ public sealed class PlayerService : IDisposable
         }
     }
 
-    private string TempoAnalysisPath(string trackId) => Path.Combine(_audioCache, $"{trackId}.motion-v3.json");
+    private string TempoAnalysisPath(string trackId) => Path.Combine(_audioCache, $"{trackId}.motion-v4.json");
 
     private async Task<TempoAnalysis?> LoadTempoAnalysisAsync(string trackId, string source, CancellationToken token)
     {

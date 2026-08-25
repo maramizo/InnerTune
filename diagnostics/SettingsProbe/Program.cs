@@ -112,10 +112,34 @@ var denseRockLowEnvelope = Enumerable.Range(0, 96)
     .Select(index => .10f + (index % 4 == 0 ? .024f : 0))
     .ToArray();
 var denseRockScore = RepresentativeTempoAnalyzer.EstimateDanceability(denseRockEnvelope, denseRockLowEnvelope, 120);
+var danceMetrics = RepresentativeTempoAnalyzer.MeasureDanceability(danceEnvelope, danceLowEnvelope, 120);
+var pianoMetrics = RepresentativeTempoAnalyzer.MeasureDanceability(pianoEnvelope, pianoLowEnvelope, 120);
+var denseRockMetrics = RepresentativeTempoAnalyzer.MeasureDanceability(denseRockEnvelope, denseRockLowEnvelope, 120);
 var raveClassificationWorks = danceScore >= .58 && denseRockScore >= .58 &&
     pianoScore <= .45 && danceScore > pianoScore + .25 && denseRockScore > pianoScore + .20;
-var shortFullnessPlan = JumpWindowPlanner.Plan(Enumerable.Repeat(.90f, 32).ToArray(), .125, .10, .70, 1);
-var sustainedFullnessPlan = JumpWindowPlanner.Plan(Enumerable.Repeat(.90f, 80).ToArray(), .125, .10, .70, 1);
+var jumpStyleGateWorks = JumpWindowPlanner.IsJumpWorthy(danceMetrics) &&
+    JumpWindowPlanner.IsJumpWorthy(denseRockMetrics) &&
+    !JumpWindowPlanner.IsJumpWorthy(pianoMetrics);
+var denseChorusMetrics = new DanceMetrics(.64, .67, .43, .43, .70, 1, 1, .61, .55, .32, 1);
+var sparseDanceMetrics = new DanceMetrics(.91, .86, .81, .81, .87, 1, .01, .05, 0, 1, 1);
+var pianoRepriseMetrics = new DanceMetrics(.68, .77, .17, .22, .90, 1, .19, .92, .17, .05, 1);
+var guitarInstrumentalMetrics = new DanceMetrics(.36, .38, 0, .06, .26, .7, .45, .5, .09, .05, 1);
+var catalogStyleGateWorks = JumpWindowPlanner.IsJumpWorthy(denseChorusMetrics) &&
+    JumpWindowPlanner.IsJumpWorthy(sparseDanceMetrics) &&
+    !JumpWindowPlanner.IsJumpWorthy(pianoRepriseMetrics) &&
+    !JumpWindowPlanner.IsJumpWorthy(guitarInstrumentalMetrics);
+var chorusEnvelope = Enumerable.Range(0, 240)
+    .Select(index => index is >= 80 and < 144 ? .85f : .18f)
+    .ToArray();
+var chorusPeakPlan = JumpWindowPlanner.Plan(chorusEnvelope, .125, .18, .85, denseChorusMetrics);
+var pianoPeakPlan = JumpWindowPlanner.Plan(chorusEnvelope, .125, .18, .85, pianoRepriseMetrics);
+var chorusPeakPlanningWorks = chorusPeakPlan.Count > 0 &&
+    chorusPeakPlan.All(window => window.DurationSeconds >= JumpWindowPlanner.MinimumJumpSeconds) &&
+    pianoPeakPlan.Count == 0;
+var shortFullnessPlan = JumpWindowPlanner.Plan(
+    Enumerable.Repeat(.90f, 32).ToArray(), .125, .10, .70, danceMetrics);
+var sustainedFullnessPlan = JumpWindowPlanner.Plan(
+    Enumerable.Repeat(.90f, 80).ToArray(), .125, .10, .70, danceMetrics);
 var predictiveJumpPlanningWorks = shortFullnessPlan.Count == 0 && sustainedFullnessPlan.Count == 1 &&
     sustainedFullnessPlan[0].DurationSeconds >= JumpWindowPlanner.MinimumJumpSeconds;
 var exclusiveJumpAnimator = new AudioIconAnimator();
@@ -318,7 +342,7 @@ foreach (var inspectedPath in args.Where(File.Exists))
     }
     inspectedTracks.Add(new { path = inspectedPath, analysis = inspectedAnalysis, jumpCoverage = inspectedJumpCoverage });
 }
-var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && delayedTickCatchesUp && choreographyMarkersWork && offBeatLandingStillJumps && pianoDoesNotJump && raveClassificationWorks && predictiveJumpPlanningWorks && jumpPoseIgnoresHandIntensity && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks && motionAnalysisSerializationWorks;
+var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && delayedTickCatchesUp && choreographyMarkersWork && offBeatLandingStillJumps && pianoDoesNotJump && raveClassificationWorks && jumpStyleGateWorks && catalogStyleGateWorks && chorusPeakPlanningWorks && predictiveJumpPlanningWorks && jumpPoseIgnoresHandIntensity && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks && motionAnalysisSerializationWorks;
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed,
@@ -333,6 +357,9 @@ Console.WriteLine(JsonSerializer.Serialize(new
     offBeatLandingStillJumps,
     pianoDoesNotJump,
     raveClassificationWorks,
+    jumpStyleGateWorks,
+    catalogStyleGateWorks,
+    chorusPeakPlanningWorks,
     predictiveJumpPlanningWorks,
     jumpPoseIgnoresHandIntensity,
     danceScore,
