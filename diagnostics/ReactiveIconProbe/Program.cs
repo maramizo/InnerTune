@@ -25,14 +25,14 @@ internal static class Program
             AudioIconAnimator.Encode(4, 4),
             AudioIconAnimator.Encode(5, 0),
             AudioIconAnimator.Encode(5, 2),
-            AudioIconAnimator.Encode(5, 6)
+            AudioIconAnimator.EncodeJump(3)
         };
         foreach (var index in selected) Save(frames[index], Path.Combine(outputDirectory, $"frame-{index:D2}.png"));
         var animationDirectory = Path.Combine(outputDirectory, "peak-animation");
         Directory.CreateDirectory(animationDirectory);
         for (var phase = 0; phase < AudioIconAnimator.PhaseCount; phase++)
         {
-            var frame = AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, phase);
+            var frame = AudioIconAnimator.EncodeJump(phase);
             Save(frames[frame], Path.Combine(animationDirectory, $"frame-{phase:D2}.png"));
         }
 
@@ -59,12 +59,22 @@ internal static class Program
         Save(frames[0], idlePath);
         SaveIcon(frames[0], iconPath);
 
-        var passed = frames.Length == AudioIconAnimator.FrameCount && hashes.Distinct().Count() == frames.Length;
+        var normalRestHashes = new[]
+        {
+            hashes[AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, 0)],
+            hashes[AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, AudioIconAnimator.PhaseCount / 2)]
+        };
+        var jumpLandsCleanly = hashes[AudioIconAnimator.EncodeJump(0)] == normalRestHashes[0] &&
+            hashes[AudioIconAnimator.EncodeJump(AudioIconAnimator.PhaseCount / 2)] == normalRestHashes[1];
+        var passed = frames.Length == AudioIconAnimator.FrameCount &&
+            hashes.Distinct().Count() == frames.Length - 2 &&
+            jumpLandsCleanly;
         Console.WriteLine(JsonSerializer.Serialize(new
         {
             passed,
             frameCount = frames.Length,
             uniqueFrames = hashes.Distinct().Count(),
+            jumpLandsCleanly,
             selected,
             contactSheet = contactPath,
             idle = idlePath,

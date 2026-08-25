@@ -16,12 +16,12 @@ public sealed class PlayerService : IDisposable
     private readonly string _audioCache = Path.Combine(AppRuntime.DataDirectory, "audio-cache");
     private readonly Dictionary<string, string> _preparedFiles = new();
     private readonly ConcurrentDictionary<string, Task<string>> _preparations = new();
-    private readonly ConcurrentDictionary<string, double> _tempoCache = new();
+    private readonly ConcurrentDictionary<string, TempoAnalysis> _tempoCache = new();
     private IReadOnlyList<Track> _queue = [];
     private string[] _queueIds = [];
     private WaveOutEvent? _output;
     private MediaFoundationReader? _reader;
-    private MeteringSampleProvider? _meter;
+    private RmsMeteringSampleProvider? _meter;
     private Track? _currentTrack;
     private int _index = -1;
     private bool _playing;
@@ -38,6 +38,7 @@ public sealed class PlayerService : IDisposable
     public event EventHandler<string>? Failed;
     public event Action<float>? AudioLevelChanged;
     public event Action<string, double>? TempoEstimated;
+    public event Action<string, double, double>? MotionProfileEstimated;
     public Track? CurrentTrack => _currentTrack;
     public int CurrentIndex => _index;
     public bool IsPlaying => _playing;
@@ -160,8 +161,8 @@ public sealed class PlayerService : IDisposable
             const int animationSamplesPerSecond = 15;
             var samplesPerNotification = Math.Max(1,
                 _reader.WaveFormat.SampleRate * _reader.WaveFormat.Channels / animationSamplesPerSecond);
-            _meter = new MeteringSampleProvider(_reader.ToSampleProvider(), samplesPerNotification);
-            _meter.StreamVolume += Meter_StreamVolume;
+            _meter = new RmsMeteringSampleProvider(_reader.ToSampleProvider(), samplesPerNotification);
+            _meter.LoudnessAvailable += Meter_LoudnessAvailable;
             _output = new WaveOutEvent { DesiredLatency = 150, NumberOfBuffers = 3, Volume = _volume };
             _output.PlaybackStopped += Output_PlaybackStopped;
             _output.Init(_meter);
@@ -210,11 +211,8 @@ public sealed class PlayerService : IDisposable
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    private void Meter_StreamVolume(object? sender, StreamVolumeEventArgs e)
-    {
-        var peak = e.MaxSampleValues.Length == 0 ? 0 : e.MaxSampleValues.Max(value => Math.Abs(value));
-        AudioLevelChanged?.Invoke(Math.Clamp(peak * _volume, 0, 1));
-    }
+    private void Meter_LoudnessAvailable(float loudness) =>
+        AudioLevelChanged?.Invoke(Math.Clamp(loudness, 0, 1));
 
     public async Task NextAsync(bool automatic = false)
     {
@@ -363,7 +361,8 @@ public sealed class PlayerService : IDisposable
         if (!TempoAnalysisEnabled) return;
         if (_tempoCache.TryGetValue(trackId, out var cached))
         {
-            TempoEstimated?.Invoke(trackId, cached);
+            TempoEstimated?.Invoke(trackId, cached.Bpm);
+            MotionProfileEstimated?.Invoke(trackId, cached.Danceability, cached.PeakLoudness);
             return;
         }
         var cancellation = new CancellationTokenSource();
@@ -378,8 +377,12 @@ public sealed class PlayerService : IDisposable
             await Task.Delay(750, cancellation.Token);
             var analysis = await RepresentativeTempoAnalyzer.AnalyzeAsync(source, cancellation.Token);
             if (analysis is null || cancellation.IsCancellationRequested) return;
-            _tempoCache[trackId] = analysis.Bpm;
-            if (_currentTrack?.Id == trackId) TempoEstimated?.Invoke(trackId, analysis.Bpm);
+            _tempoCache[trackId] = analysis;
+            if (_currentTrack?.Id == trackId)
+            {
+                TempoEstimated?.Invoke(trackId, analysis.Bpm);
+                MotionProfileEstimated?.Invoke(trackId, analysis.Danceability, analysis.PeakLoudness);
+            }
         }
         catch (OperationCanceledException) { }
         catch { }
@@ -418,7 +421,7 @@ public sealed class PlayerService : IDisposable
         _currentSource = null;
         if (_meter is not null)
         {
-            _meter.StreamVolume -= Meter_StreamVolume;
+            _meter.LoudnessAvailable -= Meter_LoudnessAvailable;
             _meter = null;
         }
         if (_output is not null)

@@ -26,7 +26,7 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 - **Share** copies a compact `innertune://playlist/...` link. Opening the link in Windows previews and saves the named playlist without replacing the current queue; **Import link** under Saved queues is available for manual pasting.
 - Press `:` outside a text field to open Luna. Search appears again only when you select Search.
 - Use **Mini player** for the compact always-on-top widget.
-- Hover InnerTune on the Windows taskbar for Previous, Play/Pause, and Next. The DJ Cat uses 12 procedural motion phases at a lightweight 15 Hz cadence. Its fixed gesture speed is estimated once from the cached-file section closest to the song’s sampled average loudness, without moving playback or continuously analyzing audio.
+- Hover InnerTune on the Windows taskbar for Previous, Play/Pause, and Next. The same animated DJ Cat appears in the title, tray, and mini-player using 12 procedural motion phases at a lightweight 15 Hz cadence. Loudness changes latch only while its paws are grounded. A one-time cached-file sample combines rhythmic pulse, transients, bass rhythm, tempo, and per-song loudness range so rave-like peaks jump on the beat without treating every loud song as dance music.
 - Windows media keys and system media controls show the current title, artist, album, artwork, timeline, and transport controls.
 - **Settings** includes Midnight, Graphite, and OLED themes; DJ Cat, Minimal, and custom local icons; an audio-reactive animated DJ Cat toggle; and an opt-in playback resume setting. Automatic playback on startup is off by default.
 - The active saved queue is outlined and marked **Playing**. Editing the current queue removes that source marker.

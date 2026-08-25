@@ -20,7 +20,44 @@ var iconLevelsWork = iconAnimator.Update(0, false, true) == 0 &&
     animatedFrames.Distinct().Count() >= AudioIconAnimator.PhaseCount &&
     animatedFrames.Min() >= AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, 0) &&
     animatedFrames.Max() <= AudioIconAnimator.FrameCount - 1 &&
-    AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, AudioIconAnimator.PhaseCount - 1) == AudioIconAnimator.FrameCount - 1;
+    AudioIconAnimator.EncodeJump(AudioIconAnimator.PhaseCount - 1) == AudioIconAnimator.FrameCount - 1;
+var latchingAnimator = new AudioIconAnimator();
+latchingAnimator.SetTempo(120);
+latchingAnimator.SetMotionProfile(.92, .78);
+var priorLevel = 0;
+var priorJump = false;
+var sawLevelChange = false;
+var sawJump = false;
+var motionChangesOnlyAtRest = true;
+for (var sample = 0; sample < 180; sample++)
+{
+    var level = sample % 24 < 12 ? .95f : .03f;
+    var frame = latchingAnimator.Update(level, true, true, 1d / 15);
+    var frameLevel = AudioIconAnimator.DecodeLevel(frame);
+    var jumping = AudioIconAnimator.IsJumpFrame(frame);
+    if (frameLevel != priorLevel || jumping != priorJump)
+    {
+        sawLevelChange |= frameLevel != priorLevel;
+        sawJump |= jumping;
+        motionChangesOnlyAtRest &= AudioIconAnimator.IsRestPhase(AudioIconAnimator.DecodePhase(frame));
+    }
+    priorLevel = frameLevel;
+    priorJump = jumping;
+}
+var groundedMotionTransitionsWork = sawLevelChange && sawJump && motionChangesOnlyAtRest;
+var pianoAnimator = new AudioIconAnimator();
+pianoAnimator.SetTempo(120);
+pianoAnimator.SetMotionProfile(.18, .22);
+var pianoDoesNotJump = Enumerable.Range(0, 180)
+    .Select(index => pianoAnimator.Update(index % 15 == 0 ? .9f : .15f, true, true, 1d / 15))
+    .All(frame => !AudioIconAnimator.IsJumpFrame(frame));
+var danceEnvelope = Enumerable.Range(0, 96).Select(index => index % 4 == 0 ? .74f : .10f).ToArray();
+var danceLowEnvelope = Enumerable.Range(0, 96).Select(index => index % 4 == 0 ? .40f : .035f).ToArray();
+var pianoEnvelope = Enumerable.Range(0, 96).Select(index => .18f + .05f * (float)Math.Sin(index * .37)).ToArray();
+var pianoLowEnvelope = pianoEnvelope.Select(value => value * .18f).ToArray();
+var danceScore = RepresentativeTempoAnalyzer.EstimateDanceability(danceEnvelope, danceLowEnvelope, 120);
+var pianoScore = RepresentativeTempoAnalyzer.EstimateDanceability(pianoEnvelope, pianoLowEnvelope, 120);
+var raveClassificationWorks = danceScore >= .58 && pianoScore <= .45 && danceScore > pianoScore + .25;
 static (double Bpm, int PhaseChanges, bool Locked, bool Stable) AnalyzeTempo(double bpm)
 {
     var tracker = new BeatTempoTracker();
@@ -93,11 +130,11 @@ finally
     if (Directory.Exists(tempoProbeRoot)) Directory.Delete(tempoProbeRoot, true);
 }
 var signal = new SignalGenerator(48_000, 2) { Frequency = 440, Gain = .7, Type = SignalGeneratorType.Sin };
-var meter = new MeteringSampleProvider(signal, 6_000);
-var measuredPeak = 0f;
-meter.StreamVolume += (_, eventArgs) => measuredPeak = Math.Max(measuredPeak, eventArgs.MaxSampleValues.Max());
+var meter = new RmsMeteringSampleProvider(signal, 6_000);
+var measuredLoudness = 0f;
+meter.LoudnessAvailable += value => measuredLoudness = Math.Max(measuredLoudness, value);
 meter.Read(new float[24_000], 0, 24_000);
-var audioMeterWorks = measuredPeak > .65f;
+var audioMeterWorks = measuredLoudness is > .48f and < .51f;
 var effectivePath = WindowsPathEnvironment.BuildEffectivePath(
     @"C:\Machine;%SystemRoot%\System32",
     @"C:\User;%PATH%",
@@ -156,7 +193,34 @@ finally
 {
     if (Directory.Exists(playbackRoot)) Directory.Delete(playbackRoot, true);
 }
-var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
+TempoAnalysis? inspectedAnalysis = null;
+double? inspectedJumpCoverage = null;
+if (args.FirstOrDefault() is { Length: > 0 } inspectedPath && File.Exists(inspectedPath))
+{
+    inspectedAnalysis = await RepresentativeTempoAnalyzer.AnalyzeAsync(inspectedPath);
+    if (inspectedAnalysis is not null)
+    {
+        using var inspectedReader = new MediaFoundationReader(inspectedPath);
+        var inspectedMeter = new RmsMeteringSampleProvider(
+            inspectedReader.ToSampleProvider(),
+            inspectedReader.WaveFormat.SampleRate * inspectedReader.WaveFormat.Channels / 15);
+        var inspectedAnimator = new AudioIconAnimator();
+        inspectedAnimator.SetTempo(inspectedAnalysis.Bpm);
+        inspectedAnimator.SetMotionProfile(inspectedAnalysis.Danceability, inspectedAnalysis.PeakLoudness);
+        var inspectedFrames = 0;
+        var inspectedJumpFrames = 0;
+        inspectedMeter.LoudnessAvailable += loudness =>
+        {
+            var frame = inspectedAnimator.Update(loudness, true, true, 1d / 15);
+            inspectedFrames++;
+            if (AudioIconAnimator.IsJumpFrame(frame)) inspectedJumpFrames++;
+        };
+        var inspectedBuffer = new float[32_768];
+        while (inspectedMeter.Read(inspectedBuffer, 0, inspectedBuffer.Length) > 0) { }
+        inspectedJumpCoverage = inspectedFrames == 0 ? 0 : inspectedJumpFrames / (double)inspectedFrames;
+    }
+}
+var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && groundedMotionTransitionsWork && pianoDoesNotJump && raveClassificationWorks && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed,
@@ -164,6 +228,11 @@ Console.WriteLine(JsonSerializer.Serialize(new
     defaultIcon = new AppSettings().Icon,
     animatedIconDefault = new AppSettings().AnimatedIconEnabled,
     audioIconLevelsWork = iconLevelsWork,
+    groundedMotionTransitionsWork,
+    pianoDoesNotJump,
+    raveClassificationWorks,
+    danceScore,
+    pianoScore,
     tempoTrackingWorks,
     slowTempo = slowTempo.Bpm,
     fastTempo = fastTempo.Bpm,
@@ -176,9 +245,12 @@ Console.WriteLine(JsonSerializer.Serialize(new
     representativeSampleStart,
     representativeSampleBpm,
     audioMeterWorks,
+    measuredLoudness,
     pathMergeWorks,
     installerEnvironmentWorks,
     playbackStoreWorks,
+    inspectedAnalysis,
+    inspectedJumpCoverage,
     autoResumeDefault = new AppSettings().AutoResumeOnStart,
     optInResumesPlaying = optInResumesOnlyPlaying
 }));

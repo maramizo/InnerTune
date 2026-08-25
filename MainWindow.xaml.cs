@@ -100,6 +100,8 @@ public partial class MainWindow : Window
         _player.Failed += (_, message) => Dispatcher.Invoke(() => SetStatus(message, true));
         _player.AudioLevelChanged += QueueAnimatedIconUpdate;
         _player.TempoEstimated += (trackId, bpm) => Dispatcher.BeginInvoke(() => ApplyEstimatedTempo(trackId, bpm));
+        _player.MotionProfileEstimated += (trackId, danceability, peakLoudness) =>
+            Dispatcher.BeginInvoke(() => ApplyMotionProfile(trackId, danceability, peakLoudness));
         _agent.Activity += (_, activity) => Dispatcher.Invoke(() => AddAgentActivity(activity));
         ChatMessages.ItemsSource = _chat;
         VideoCandidateList.ItemsSource = _videoCandidates;
@@ -536,6 +538,7 @@ public partial class MainWindow : Window
             var source = ResolveAppIcon(icon);
             Icon = source;
             TitleLogo.Source = source;
+            MiniDjCat.Source = icon == "dj-cat" ? source : null;
             _activeDjFrame = icon == "dj-cat" ? 0 : -1;
             CustomIconPreview.Source = File.Exists(_library.Settings.CustomIconPath) ? LoadBitmap(_library.Settings.CustomIconPath!, 128) : null;
             DjCatIconChoice.IsChecked = icon == "dj-cat";
@@ -548,6 +551,7 @@ public partial class MainWindow : Window
             AutoResumeToggle.IsChecked = _library.Settings.AutoResumeOnStart;
             UpdateTrayIcon();
             UpdatePlaybackModeButtons();
+            UpdateMiniDjCatAppearance();
         }
         finally { _applyingSettings = false; }
     }
@@ -700,6 +704,12 @@ public partial class MainWindow : Window
         _djIconAnimator.SetTempo(bpm);
     }
 
+    private void ApplyMotionProfile(string trackId, double danceability, double peakLoudness)
+    {
+        if (_player.CurrentTrack?.Id != trackId) return;
+        _djIconAnimator.SetMotionProfile(danceability, peakLoudness);
+    }
+
     private void QueueAnimatedIconUpdate(float level)
     {
         _pendingAudioLevel = level;
@@ -717,6 +727,7 @@ public partial class MainWindow : Window
         var frames = GetDjIconFrames();
         frame = Math.Clamp(frame, 0, frames.Length - 1);
         TitleLogo.Source = frames[frame];
+        MiniDjCat.Source = frames[frame];
         _djTrayFrames ??= frames.Select(CreateNativeIcon).ToArray();
         if (_tray is not null)
         {
@@ -790,6 +801,7 @@ public partial class MainWindow : Window
         _library.Settings.AnimatedIconEnabled = AnimatedIconToggle.IsChecked == true;
         _player.TempoAnalysisEnabled = _library.Settings.Icon == "dj-cat" && _library.Settings.AnimatedIconEnabled;
         if (!_library.Settings.AnimatedIconEnabled) SetDjFrame(0);
+        UpdateMiniDjCatAppearance();
         await SaveAsync();
     }
 
@@ -2336,6 +2348,7 @@ public partial class MainWindow : Window
             Grid.SetRow(ArtworkFrame, 0); Grid.SetColumn(ArtworkFrame, 0);
             Grid.SetRow(NowTextPanel, 0); Grid.SetColumn(NowTextPanel, 1);
             ArtworkFrame.Visibility = Visibility.Visible;
+            UpdateMiniDjCatAppearance();
             ArtworkFrame.Width = ArtworkFrame.Height = 58;
             ArtworkFrame.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
             NowTextPanel.Margin = new Thickness(12, 0, 8, 0);
@@ -2390,6 +2403,7 @@ public partial class MainWindow : Window
         Grid.SetRow(ArtworkFrame, 0); Grid.SetColumn(ArtworkFrame, 0);
         Grid.SetRow(NowTextPanel, 1); Grid.SetColumn(NowTextPanel, 0);
         ArtworkFrame.Visibility = Visibility.Visible;
+        UpdateMiniDjCatAppearance();
         ArtworkFrame.Width = ArtworkFrame.Height = width >= 520 ? 42 : 37;
         ArtworkFrame.HorizontalAlignment = System.Windows.HorizontalAlignment.Center;
         NowTextPanel.Margin = new Thickness(2, 2, 2, 0);
@@ -2429,11 +2443,21 @@ public partial class MainWindow : Window
         MiniQueueSurface.Width = Math.Clamp(width - 16, 288, 380);
     }
 
+    private void UpdateMiniDjCatAppearance()
+    {
+        if (MiniDjCatSurface is null || NowArtwork is null) return;
+        var visible = _mini && _library.Settings.Icon == "dj-cat" && _library.Settings.AnimatedIconEnabled;
+        MiniDjCatSurface.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        NowArtwork.Opacity = visible ? .34 : 1;
+    }
+
     private async Task CaptureMiniLayoutsAsync(string outputDirectory)
     {
         try
         {
             if (!_mini) ToggleMini();
+            if (int.TryParse(Environment.GetEnvironmentVariable(AppRuntime.TestIconFrameVariable), out var iconFrame))
+                SetDjFrame(iconFrame);
             Directory.CreateDirectory(outputDirectory);
             foreach (var width in new[] { 720, 560, 440, 320 })
             {

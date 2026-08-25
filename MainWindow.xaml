@@ -515,7 +515,14 @@
           <Grid x:Name="NowPlayingSection" Margin="18,10" Background="Transparent" Cursor="Hand" MouseEnter="NowPlayingSection_MouseEnter" MouseLeave="NowPlayingSection_MouseLeave">
             <Grid.ColumnDefinitions><ColumnDefinition x:Name="ArtworkColumn" Width="62"/><ColumnDefinition x:Name="NowTextColumn" Width="*"/></Grid.ColumnDefinitions>
             <Grid.RowDefinitions><RowDefinition x:Name="ArtworkRow" Height="*"/><RowDefinition x:Name="NowTextRow" Height="0"/></Grid.RowDefinitions>
-            <Border x:Name="ArtworkFrame" Width="58" Height="58" CornerRadius="9" Background="#292830"><Image x:Name="NowArtwork" Stretch="UniformToFill"/></Border>
+            <Border x:Name="ArtworkFrame" Width="58" Height="58" CornerRadius="9" Background="#292830" ClipToBounds="True">
+              <Grid>
+                <Image x:Name="NowArtwork" Stretch="UniformToFill"/>
+                <Border x:Name="MiniDjCatSurface" Background="#B817171C" Visibility="Collapsed">
+                  <Image x:Name="MiniDjCat" Stretch="Uniform"/>
+                </Border>
+              </Grid>
+            </Border>
             <StackPanel x:Name="NowTextPanel" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,8,0"><TextBlock x:Name="NowTitle" Text="Nothing playing" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock x:Name="NowArtist" Text="Choose a song from the queue" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,4,0,0" Cursor="Hand" ToolTip="Open artist" MouseLeftButtonUp="Artist_Click"/></StackPanel>
             <Popup x:Name="MiniQueuePopup" PlacementTarget="{Binding ElementName=NowPlayingSection}" Placement="Top" VerticalOffset="-7" AllowsTransparency="True" PopupAnimation="Fade" StaysOpen="True" Focusable="False">
               <Border x:Name="MiniQueueSurface" Width="380" MaxHeight="420" Margin="0,0,0,2" Padding="9,10,9,8" Background="#17171C" BorderBrush="#3B3944" BorderThickness="1" CornerRadius="12" MouseEnter="MiniQueueSurface_MouseEnter" MouseLeave="MiniQueueSurface_MouseLeave">

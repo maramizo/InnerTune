@@ -33,10 +33,12 @@ public static class ReactiveDjIconRenderer
         for (var level = 1; level < AudioIconAnimator.LevelCount; level++)
             for (var phase = 0; phase < AudioIconAnimator.PhaseCount; phase++)
                 frames[AudioIconAnimator.Encode(level, phase)] = Render(level / (double)(AudioIconAnimator.LevelCount - 1), phase);
+        for (var phase = 0; phase < AudioIconAnimator.PhaseCount; phase++)
+            frames[AudioIconAnimator.EncodeJump(phase)] = Render(1, phase, true);
         return frames;
     }
 
-    public static BitmapSource Render(double amplitude, int phase)
+    public static BitmapSource Render(double amplitude, int phase, bool jumping = false)
     {
         amplitude = Math.Clamp(amplitude, 0, 1);
         var visual = new DrawingVisual();
@@ -44,7 +46,7 @@ public static class ReactiveDjIconRenderer
         {
             var angle = phase * Math.PI * 2 / AudioIconAnimator.PhaseCount;
             DrawEqualizer(drawing, amplitude, angle);
-            DrawCat(drawing, amplitude, angle);
+            DrawCat(drawing, amplitude, angle, jumping);
         }
         var bitmap = new RenderTargetBitmap(Size, Size, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(visual);
@@ -68,10 +70,19 @@ public static class ReactiveDjIconRenderer
         }
     }
 
-    private static void DrawCat(DrawingContext drawing, double amplitude, double angle)
+    private static void DrawCat(DrawingContext drawing, double amplitude, double angle, bool jumping)
     {
-        var bob = -4 * amplitude * (.5 + .5 * Math.Sin(angle * 2));
-        drawing.DrawEllipse(FrozenBrush(58, 0, 0, 0), null, new Point(64, 119), 48, 7);
+        var cycle = angle / (Math.PI * 2);
+        var leftLift = amplitude * GesturePulse(cycle, .25, .25);
+        var rightLift = amplitude * GesturePulse(cycle, .75, .25);
+        var gesture = Math.Max(leftLift, rightLift);
+        var jump = jumping ? Math.Abs(Math.Sin(angle)) : 0;
+        // The resting cat sits into the deck; rave frames lift the whole body
+        // far enough to read even at tray size without clipping the headset.
+        var bob = 8 - 3 * gesture - 14 * jump;
+        var shadowWidth = 48 - 13 * jump;
+        var shadowAlpha = (byte)Math.Round(58 - 26 * jump);
+        drawing.DrawEllipse(FrozenBrush(shadowAlpha, 0, 0, 0), null, new Point(64, 119), shadowWidth, 7 - 2 * jump);
 
         var tailOutline = FrozenPen(Ink, 15);
         var tailPen = FrozenPen(Fur, 11);
@@ -142,8 +153,6 @@ public static class ReactiveDjIconRenderer
         mouth.Freeze();
         drawing.DrawGeometry(null, FrozenPen(Eye, 1.8), mouth);
 
-        var leftLift = amplitude * (.25 + .75 * (.5 + .5 * Math.Sin(angle)));
-        var rightLift = amplitude * (.25 + .75 * (.5 - .5 * Math.Sin(angle)));
         var leftHand = new Point(43 - 12 * leftLift, 89 + bob - 67 * leftLift);
         var rightHand = new Point(85 + 12 * rightLift, 89 + bob - 67 * rightLift);
         DrawArm(drawing, new Point(44, 72 + bob), leftHand);
@@ -160,6 +169,13 @@ public static class ReactiveDjIconRenderer
 
         DrawPaw(drawing, leftHand);
         DrawPaw(drawing, rightHand);
+    }
+
+    private static double GesturePulse(double cycle, double center, double halfWidth)
+    {
+        var distance = Math.Abs(cycle - center);
+        if (distance >= halfWidth) return 0;
+        return .5 + .5 * Math.Cos(distance / halfWidth * Math.PI);
     }
 
     private static void DrawArm(DrawingContext drawing, Point shoulder, Point hand)

@@ -2,7 +2,13 @@ using NAudio.Wave;
 
 namespace InnerTune;
 
-public sealed record TempoAnalysis(double Bpm, TimeSpan SampleStart, double SampleLoudness, double AverageLoudness);
+public sealed record TempoAnalysis(
+    double Bpm,
+    TimeSpan SampleStart,
+    double SampleLoudness,
+    double AverageLoudness,
+    double PeakLoudness,
+    double Danceability);
 
 public static class RepresentativeTempoAnalyzer
 {
@@ -46,12 +52,14 @@ public static class RepresentativeTempoAnalyzer
             .Distinct()
             .ToArray();
         var loudness = new List<double>(centers.Length);
+        var sampledPeaks = new List<double>(centers.Length);
         foreach (var center in centers)
         {
             var start = Math.Clamp(center - LoudnessWindowSeconds / 2, 0, Math.Max(0, duration - LoudnessWindowSeconds));
             reader.CurrentTime = TimeSpan.FromSeconds(start);
-            var envelope = ReadEnvelope(samples, reader.WaveFormat, LoudnessWindowSeconds, token);
-            loudness.Add(envelope.Count == 0 ? 0 : envelope.Average(value => (double)value));
+            var features = ReadEnvelope(samples, reader.WaveFormat, LoudnessWindowSeconds, token);
+            loudness.Add(features.Full.Count == 0 ? 0 : features.Full.Average(value => (double)value));
+            sampledPeaks.Add(features.Full.Count == 0 ? 0 : features.Full.Max());
         }
 
         var selected = SelectRepresentativeWindow(loudness);
@@ -59,39 +67,128 @@ public static class RepresentativeTempoAnalyzer
         var sampleDuration = Math.Min(TempoWindowSeconds, duration);
         var sampleStart = Math.Clamp(centers[selected] - sampleDuration / 2, 0, Math.Max(0, duration - sampleDuration));
         reader.CurrentTime = TimeSpan.FromSeconds(sampleStart);
-        var tempoEnvelope = ReadEnvelope(samples, reader.WaveFormat, sampleDuration, token);
+        var tempoFeatures = ReadEnvelope(samples, reader.WaveFormat, sampleDuration, token);
         var tracker = new BeatTempoTracker();
-        foreach (var level in tempoEnvelope)
+        foreach (var level in tempoFeatures.Full)
         {
             tracker.Update(level, EnvelopeSeconds);
             if (tracker.IsLocked) break;
         }
         if (!tracker.HasEstimate) return null;
-        return new TempoAnalysis(tracker.Bpm, TimeSpan.FromSeconds(sampleStart), loudness[selected], loudness.Average());
+        var danceability = EstimateDanceability(tempoFeatures.Full, tempoFeatures.Low, tracker.Bpm);
+        var peakLoudness = Math.Max(
+            sampledPeaks.Count == 0 ? 0 : sampledPeaks.Max(),
+            tempoFeatures.Full.Count == 0 ? 0 : tempoFeatures.Full.Max());
+        return new TempoAnalysis(
+            tracker.Bpm,
+            TimeSpan.FromSeconds(sampleStart),
+            loudness[selected],
+            loudness.Average(),
+            peakLoudness,
+            danceability);
     }
 
-    private static List<float> ReadEnvelope(ISampleProvider samples, WaveFormat format, double seconds, CancellationToken token)
+    public static double EstimateDanceability(
+        IReadOnlyList<float> fullEnvelope,
+        IReadOnlyList<float> lowEnvelope,
+        double bpm)
+    {
+        var count = Math.Min(fullEnvelope.Count, lowEnvelope.Count);
+        if (count < 16) return 0;
+        var full = fullEnvelope.Take(count).Select(value => (double)value).ToArray();
+        var low = lowEnvelope.Take(count).Select(value => (double)value).ToArray();
+        var mean = Math.Max(.0001, full.Average());
+        var pulse = Periodicity(full, bpm);
+        var lowPulse = Periodicity(low, bpm);
+        var bassShare = Math.Clamp(low.Average() / mean, 0, 1);
+        var positiveFlux = Enumerable.Range(1, count - 1)
+            .Average(index => Math.Max(0, full[index] - full[index - 1])) / mean;
+        var transientStrength = SmoothStep(.035, .28, positiveFlux);
+        var bassRhythm = lowPulse * SmoothStep(.12, .46, bassShare);
+        var tempoFit = SmoothStep(72, 96, bpm) * (1 - SmoothStep(178, 194, bpm));
+        return Math.Clamp(.42 * pulse + .25 * bassRhythm + .21 * transientStrength + .12 * tempoFit, 0, 1);
+    }
+
+    private static double Periodicity(IReadOnlyList<double> values, double bpm)
+    {
+        var expectedLag = 60 / Math.Clamp(bpm, BeatTempoTracker.MinimumBpm, BeatTempoTracker.MaximumBpm) / EnvelopeSeconds;
+        var candidates = new[]
+        {
+            (int)Math.Round(expectedLag) - 1,
+            (int)Math.Round(expectedLag),
+            (int)Math.Round(expectedLag) + 1,
+            (int)Math.Round(expectedLag * 2)
+        };
+        return candidates.Where(lag => lag is >= 2 && lag < values.Count / 2)
+            .Select(lag => Math.Max(0, Correlation(values, lag)))
+            .DefaultIfEmpty(0)
+            .Max();
+    }
+
+    private static double Correlation(IReadOnlyList<double> values, int lag)
+    {
+        var pairs = values.Count - lag;
+        if (pairs < 8) return 0;
+        var leftMean = Enumerable.Range(0, pairs).Average(index => values[index]);
+        var rightMean = Enumerable.Range(0, pairs).Average(index => values[index + lag]);
+        double product = 0, leftSquares = 0, rightSquares = 0;
+        for (var index = 0; index < pairs; index++)
+        {
+            var left = values[index] - leftMean;
+            var right = values[index + lag] - rightMean;
+            product += left * right;
+            leftSquares += left * left;
+            rightSquares += right * right;
+        }
+        var denominator = Math.Sqrt(leftSquares * rightSquares);
+        return denominator <= 1e-12 ? 0 : product / denominator;
+    }
+
+    private static double SmoothStep(double low, double high, double value)
+    {
+        var position = Math.Clamp((value - low) / (high - low), 0, 1);
+        return position * position * (3 - 2 * position);
+    }
+
+    private sealed record EnvelopeFeatures(List<float> Full, List<float> Low);
+
+    private static EnvelopeFeatures ReadEnvelope(ISampleProvider samples, WaveFormat format, double seconds, CancellationToken token)
     {
         var samplesPerBucket = Math.Max(format.Channels, (int)Math.Round(format.SampleRate * format.Channels * EnvelopeSeconds));
         var requestedBuckets = Math.Max(1, (int)Math.Ceiling(seconds / EnvelopeSeconds));
         var buffer = new float[Math.Min(samplesPerBucket, 16_384)];
-        var envelope = new List<float>(requestedBuckets);
-        double squareSum = 0;
+        var fullEnvelope = new List<float>(requestedBuckets);
+        var lowEnvelope = new List<float>(requestedBuckets);
+        var lowState = new double[Math.Max(1, format.Channels)];
+        var lowPassAlpha = 1 - Math.Exp(-2 * Math.PI * 180 / format.SampleRate);
+        double squareSum = 0, lowSquareSum = 0;
         var bucketSamples = 0;
-        while (envelope.Count < requestedBuckets)
+        while (fullEnvelope.Count < requestedBuckets)
         {
             token.ThrowIfCancellationRequested();
             var read = samples.Read(buffer, 0, Math.Min(buffer.Length, samplesPerBucket - bucketSamples));
             if (read <= 0) break;
-            for (var index = 0; index < read; index++) squareSum += buffer[index] * buffer[index];
+            for (var index = 0; index < read; index++)
+            {
+                var sample = buffer[index];
+                var channel = (bucketSamples + index) % lowState.Length;
+                lowState[channel] += lowPassAlpha * (sample - lowState[channel]);
+                squareSum += sample * sample;
+                lowSquareSum += lowState[channel] * lowState[channel];
+            }
             bucketSamples += read;
             if (bucketSamples < samplesPerBucket) continue;
-            envelope.Add((float)Math.Sqrt(squareSum / bucketSamples));
+            fullEnvelope.Add((float)Math.Sqrt(squareSum / bucketSamples));
+            lowEnvelope.Add((float)Math.Sqrt(lowSquareSum / bucketSamples));
             squareSum = 0;
+            lowSquareSum = 0;
             bucketSamples = 0;
         }
-        if (bucketSamples > 0 && envelope.Count < requestedBuckets)
-            envelope.Add((float)Math.Sqrt(squareSum / bucketSamples));
-        return envelope;
+        if (bucketSamples > 0 && fullEnvelope.Count < requestedBuckets)
+        {
+            fullEnvelope.Add((float)Math.Sqrt(squareSum / bucketSamples));
+            lowEnvelope.Add((float)Math.Sqrt(lowSquareSum / bucketSamples));
+        }
+        return new EnvelopeFeatures(fullEnvelope, lowEnvelope);
     }
 }
