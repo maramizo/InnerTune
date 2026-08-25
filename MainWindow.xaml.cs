@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Collections;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Animation;
 using System.Windows;
@@ -34,11 +36,14 @@ public partial class MainWindow : Window
     private LibraryData _library = new();
     private FileSystemWatcher? _watcher;
     private Forms.NotifyIcon? _tray;
+    private System.Drawing.Icon? _trayAppearanceIcon;
+    private readonly Dictionary<ItemsControl, IEnumerable?> _suspendedItemSources = [];
     private bool _reallyClose;
     private bool _mini;
     private bool _pinned;
     private bool _spinnerActive;
     private bool _settingsLoaded;
+    private bool _applyingSettings;
     private bool _playbackRestoreComplete;
     private bool _playbackDirty;
     private bool _pointerOverNowPlaying;
@@ -107,6 +112,7 @@ public partial class MainWindow : Window
     {
         _library = await _store.LoadAsync();
         _library.Playback ??= new PlaybackSnapshot();
+        _library.Settings ??= new AppSettings();
         _library.RecentlyPlayed ??= [];
         _library.VideoMappings ??= [];
         if (string.IsNullOrWhiteSpace(_library.QueueSourceName)) _library.QueueSourceName = "Current queue";
@@ -115,6 +121,7 @@ public partial class MainWindow : Window
         VolumeSlider.Value = savedVolume;
         _player.Volume = savedVolume;
         ApplyPlaybackModes();
+        ApplySettings();
         _settingsLoaded = true;
         BindLibrary();
         if (!AppRuntime.IsTestMode) CreateTrayIcon();
@@ -130,7 +137,12 @@ public partial class MainWindow : Window
         _playbackSaveTimer.Start();
         SetMode("home");
         if (AppRuntime.IsTestMode && Environment.GetEnvironmentVariable(AppRuntime.TestCaptureDirectoryVariable) is { Length: > 0 } captureDirectory)
-            _ = CaptureMiniLayoutsAsync(captureDirectory);
+        {
+            var captureView = Environment.GetEnvironmentVariable(AppRuntime.TestCaptureViewVariable);
+            _ = captureView is not null && (captureView.Equals("settings", StringComparison.OrdinalIgnoreCase) || captureView.Equals("saved", StringComparison.OrdinalIgnoreCase))
+                ? CaptureFullViewAsync(captureDirectory, captureView)
+                : CaptureMiniLayoutsAsync(captureDirectory);
+        }
         if (_pendingActivation is { } activation)
         {
             _pendingActivation = null;
@@ -160,6 +172,7 @@ public partial class MainWindow : Window
             ContextMenuStrip = menu,
             Visible = true
         };
+        UpdateTrayIcon();
         _tray.MouseClick += (_, args) => { if (args.Button == Forms.MouseButtons.Left) Dispatcher.Invoke(ShowAndActivate); };
     }
 
@@ -238,10 +251,12 @@ public partial class MainWindow : Window
             updated.PendingCommands.Clear();
             _library = updated;
             _library.Playback ??= new PlaybackSnapshot();
+            _library.Settings ??= new AppSettings();
             _library.RecentlyPlayed ??= [];
             _library.VideoMappings ??= [];
             if (string.IsNullOrWhiteSpace(_library.QueueSourceName)) _library.QueueSourceName = "Current queue";
             ApplyPlaybackModes();
+            ApplySettings();
             BindLibrary();
             if (commands.Count > 0)
             {
@@ -281,7 +296,11 @@ public partial class MainWindow : Window
         for (var i = 0; i < _library.Queue.Count; i++) { _library.Queue[i].Number = (i + 1).ToString("00"); _library.Queue[i].Refresh(); }
         QueueList.ItemsSource = _library.Queue;
         MiniQueueList.ItemsSource = _library.Queue;
-        foreach (var saved in _library.SavedQueues) saved.DisplayPath = JoinFolderPath(saved.FolderId, saved.Name);
+        foreach (var saved in _library.SavedQueues)
+        {
+            saved.DisplayPath = JoinFolderPath(saved.FolderId, saved.Name);
+            saved.IsActive = string.Equals(saved.Id, _library.QueueSourceId, StringComparison.Ordinal);
+        }
         foreach (var favorite in _library.Favorites) favorite.FolderPath = JoinFolderPath(favorite.FolderId, "Favorites");
         SavedQueueList.ItemsSource = _library.SavedQueues;
         FavoritesList.ItemsSource = _library.Favorites;
@@ -335,7 +354,7 @@ public partial class MainWindow : Window
         var track = index >= 0 ? _library.Queue[index] : saved.Track;
         if (track is null) return;
         var position = TimeSpan.FromSeconds(Math.Max(0, saved.PositionSeconds));
-        if (saved.Status.Equals("playing", StringComparison.OrdinalIgnoreCase))
+        if (PlaybackRestorePolicy.ShouldAutoResume(saved, _library.Settings))
             await _player.RestorePlayingAsync(track, index, position);
         else
             _player.RestorePaused(track, index, position);
@@ -394,7 +413,8 @@ public partial class MainWindow : Window
         SearchPanel.Visibility = mode == "search" ? Visibility.Visible : Visibility.Collapsed;
         AiPanel.Visibility = mode == "ai" ? Visibility.Visible : Visibility.Collapsed;
         LibraryPanel.Visibility = mode == "library" ? Visibility.Visible : Visibility.Collapsed;
-        foreach (var pair in new[] { (HomeNav, "home"), (SearchNav, "search"), (AiNav, "ai"), (FavoritesNav, "favorites"), (SavedNav, "saved") })
+        SettingsPanel.Visibility = mode == "settings" ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var pair in new[] { (HomeNav, "home"), (SearchNav, "search"), (AiNav, "ai"), (FavoritesNav, "favorites"), (SavedNav, "saved"), (SettingsNav, "settings") })
         {
             var selected = pair.Item2 == mode || (mode == "library" && pair.Item2 == (LibraryTabs.SelectedIndex == 0 ? "favorites" : "saved"));
             pair.Item1.Background = selected
@@ -407,6 +427,193 @@ public partial class MainWindow : Window
         if (mode == "ai") { AiBox.Focus(); ChatScroll.ScrollToEnd(); }
         if (mode == "home" && !_homeLoaded) _ = LoadHomeAsync();
     }
+
+    private void ApplySettings()
+    {
+        _applyingSettings = true;
+        try
+        {
+            var theme = (_library.Settings.Theme ?? "midnight").ToLowerInvariant();
+            var palette = theme switch
+            {
+                "graphite" => new ThemePalette("#0C1011", "#101617", "#12191A", "#171F20", "#172426", "#63D8C8"),
+                "oled" => new ThemePalette("#000000", "#050506", "#080809", "#0B0B0D", "#170B12", "#FF69A8"),
+                _ => new ThemePalette("#0B0B0E", "#101014", "#111115", "#17171C", "#211B33", "#9D7BFF")
+            };
+            _library.Settings.Theme = theme is "graphite" or "oled" ? theme : "midnight";
+            SetResourceBrush("Accent", palette.Accent);
+            SetResourceBrush("Surface", palette.Content);
+            SetResourceBrush("SurfaceRaised", palette.Player);
+            Background = Brush(palette.Window);
+            WindowSurface.Background = Brush(palette.Window);
+            TitleBar.Background = Brush(palette.Window);
+            NavigationSurface.Background = Brush(palette.Navigation);
+            QueueSurface.Background = Brush(palette.Content);
+            PlayerSurface.Background = Brush(palette.Player);
+            ContentGlow.Color = Color(palette.Glow);
+            ContentMid.Color = Color(palette.Content);
+            ContentBase.Color = Color(palette.Navigation);
+            PlayButton.Background = Brush(palette.Accent);
+            MidnightThemeChoice.IsChecked = _library.Settings.Theme == "midnight";
+            GraphiteThemeChoice.IsChecked = _library.Settings.Theme == "graphite";
+            OledThemeChoice.IsChecked = _library.Settings.Theme == "oled";
+
+            var icon = _library.Settings.Icon is "minimal" or "custom" ? _library.Settings.Icon : "dj-cat";
+            if (icon == "custom" && !File.Exists(_library.Settings.CustomIconPath)) icon = "dj-cat";
+            _library.Settings.Icon = icon;
+            var source = ResolveAppIcon(icon);
+            Icon = source;
+            TitleLogo.Source = source;
+            CustomIconPreview.Source = File.Exists(_library.Settings.CustomIconPath) ? LoadBitmap(_library.Settings.CustomIconPath!, 128) : null;
+            DjCatIconChoice.IsChecked = icon == "dj-cat";
+            MinimalIconChoice.IsChecked = icon == "minimal";
+            CustomIconChoice.IsChecked = icon == "custom";
+            CustomIconHint.Text = File.Exists(_library.Settings.CustomIconPath) ? "Custom image saved locally" : "PNG, JPG, or ICO";
+            AutoResumeToggle.IsChecked = _library.Settings.AutoResumeOnStart;
+            UpdateTrayIcon();
+            UpdatePlaybackModeButtons();
+        }
+        finally { _applyingSettings = false; }
+    }
+
+    private static System.Windows.Media.Color Color(string value) =>
+        (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(value)!;
+
+    private static System.Windows.Media.Brush Brush(string value) =>
+        new System.Windows.Media.SolidColorBrush(Color(value));
+
+    private static void SetResourceBrush(string key, string value)
+    {
+        System.Windows.Application.Current.Resources[key] = Brush(value);
+    }
+
+    private ImageSource ResolveAppIcon(string icon) => icon switch
+    {
+        "minimal" => CreateMinimalIcon(),
+        "custom" when File.Exists(_library.Settings.CustomIconPath) => LoadBitmap(_library.Settings.CustomIconPath!, 256),
+        _ => LoadBitmap(new Uri("pack://application:,,,/Assets/InnerTune-DJCat.png"), 256)
+    };
+
+    private static BitmapSource LoadBitmap(string path, int width) => LoadBitmap(new Uri(path, UriKind.Absolute), width);
+
+    private static BitmapSource LoadBitmap(Uri uri, int width)
+    {
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.UriSource = uri;
+        image.DecodePixelWidth = width;
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        image.EndInit();
+        image.Freeze();
+        return image;
+    }
+
+    private static BitmapSource CreateMinimalIcon()
+    {
+        var visual = new System.Windows.Media.DrawingVisual();
+        using (var drawing = visual.RenderOpen())
+        {
+            drawing.DrawRoundedRectangle(Brush("#9D7BFF"), null, new Rect(0, 0, 128, 128), 30, 30);
+            var pen = new System.Windows.Media.Pen(Brush("#17121F"), 9)
+            {
+                StartLineCap = System.Windows.Media.PenLineCap.Round,
+                EndLineCap = System.Windows.Media.PenLineCap.Round,
+                LineJoin = System.Windows.Media.PenLineJoin.Round
+            };
+            drawing.DrawGeometry(null, pen, System.Windows.Media.Geometry.Parse("M54,28 V83 M54,40 L91,31 V72"));
+            drawing.DrawEllipse(Brush("#17121F"), null, new System.Windows.Point(42, 88), 18, 14);
+            drawing.DrawEllipse(Brush("#17121F"), null, new System.Windows.Point(79, 77), 18, 14);
+        }
+        var bitmap = new RenderTargetBitmap(128, 128, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
+    }
+
+    private void UpdateTrayIcon()
+    {
+        if (_tray is null) return;
+        try
+        {
+            var source = ResolveAppIcon(_library.Settings.Icon);
+            var visual = new System.Windows.Media.DrawingVisual();
+            using (var drawing = visual.RenderOpen()) drawing.DrawImage(source, new Rect(0, 0, 64, 64));
+            var rendered = new RenderTargetBitmap(64, 64, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+            rendered.Render(visual);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(rendered));
+            using var stream = new MemoryStream();
+            encoder.Save(stream);
+            stream.Position = 0;
+            using var bitmap = new System.Drawing.Bitmap(stream);
+            var handle = bitmap.GetHicon();
+            try
+            {
+                var replacement = (System.Drawing.Icon)System.Drawing.Icon.FromHandle(handle).Clone();
+                var old = _trayAppearanceIcon;
+                _tray.Icon = replacement;
+                _trayAppearanceIcon = replacement;
+                old?.Dispose();
+            }
+            finally { DestroyIcon(handle); }
+        }
+        catch { }
+    }
+
+    private async void ThemeChoice_Click(object sender, RoutedEventArgs e)
+    {
+        if (_applyingSettings || sender is not FrameworkElement { Tag: string theme }) return;
+        _library.Settings.Theme = theme;
+        ApplySettings();
+        await SaveAsync();
+    }
+
+    private async void IconChoice_Click(object sender, RoutedEventArgs e)
+    {
+        if (_applyingSettings || sender is not FrameworkElement { Tag: string icon }) return;
+        if (icon == "custom" && !File.Exists(_library.Settings.CustomIconPath))
+        {
+            ChooseCustomIcon_Click(sender, e);
+            return;
+        }
+        _library.Settings.Icon = icon;
+        ApplySettings();
+        await SaveAsync();
+    }
+
+    private async void ChooseCustomIcon_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Choose an InnerTune icon",
+            Filter = "Image files|*.png;*.jpg;*.jpeg;*.ico|PNG image|*.png|JPEG image|*.jpg;*.jpeg|Windows icon|*.ico"
+        };
+        if (dialog.ShowDialog(this) != true) { ApplySettings(); return; }
+        try
+        {
+            var source = LoadBitmap(dialog.FileName, 512);
+            var destination = Path.Combine(_store.DataDirectory, "custom-app-icon.png");
+            Directory.CreateDirectory(_store.DataDirectory);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(source));
+            await using (var stream = File.Create(destination)) encoder.Save(stream);
+            _library.Settings.CustomIconPath = destination;
+            _library.Settings.Icon = "custom";
+            ApplySettings();
+            await SaveAsync();
+            SetStatus("Custom icon applied");
+        }
+        catch (Exception error) { SetStatus($"Couldn’t use that icon: {error.Message}", true); ApplySettings(); }
+    }
+
+    private async void AutoResumeToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_applyingSettings || !_settingsLoaded) return;
+        _library.Settings.AutoResumeOnStart = AutoResumeToggle.IsChecked == true;
+        await SaveAsync();
+    }
+
+    private sealed record ThemePalette(string Window, string Navigation, string Content, string Player, string Glow, string Accent);
 
     private async Task SearchAsync()
     {
@@ -466,7 +673,7 @@ public partial class MainWindow : Window
         if (_artworkUrl != track?.ArtworkUrl)
         {
             _artworkUrl = track?.ArtworkUrl;
-            try { NowArtwork.Source = string.IsNullOrWhiteSpace(_artworkUrl) ? null : new BitmapImage(new Uri(_artworkUrl)); }
+            try { NowArtwork.Source = string.IsNullOrWhiteSpace(_artworkUrl) ? null : LoadArtwork(_artworkUrl, 160); }
             catch { NowArtwork.Source = null; }
         }
         if (PlaybackIsLoading)
@@ -1362,8 +1569,20 @@ public partial class MainWindow : Window
 
     private static void SetImage(System.Windows.Controls.Image image, string? url)
     {
-        try { image.Source = string.IsNullOrWhiteSpace(url) ? null : new BitmapImage(new Uri(url)); }
+        try { image.Source = string.IsNullOrWhiteSpace(url) ? null : LoadArtwork(url, 256); }
         catch { image.Source = null; }
+    }
+
+    private static BitmapImage LoadArtwork(string url, int width)
+    {
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.UriSource = new Uri(url, UriKind.Absolute);
+        image.DecodePixelWidth = width;
+        image.CacheOption = BitmapCacheOption.OnDemand;
+        image.CreateOptions = BitmapCreateOptions.DelayCreation | BitmapCreateOptions.IgnoreColorProfile;
+        image.EndInit();
+        return image;
     }
 
     private static string FormatTime(TimeSpan value) => value.TotalHours >= 1 ? value.ToString(@"h\:mm\:ss") : value.ToString(@"m\:ss");
@@ -1384,6 +1603,7 @@ public partial class MainWindow : Window
     private void AiNav_Click(object sender, RoutedEventArgs e) => SetMode("ai");
     private void FavoritesNav_Click(object sender, RoutedEventArgs e) { LibraryTabs.SelectedIndex = 0; LibraryHeading.Text = "Liked songs"; LibraryDescription.Text = "Songs you have saved."; SetMode("library"); }
     private void SavedNav_Click(object sender, RoutedEventArgs e) { LibraryTabs.SelectedIndex = 1; LibraryHeading.Text = "Saved queues"; LibraryDescription.Text = "Queues you can return to whenever you want."; SetMode("library"); }
+    private void SettingsNav_Click(object sender, RoutedEventArgs e) => SetMode("settings");
     private void EmptySearch_Click(object sender, RoutedEventArgs e) => SetMode("search");
     private async void Search_Click(object sender, RoutedEventArgs e) => await SearchAsync();
     private async void SearchBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e) { if (e.Key == Key.Enter) { e.Handled = true; await SearchAsync(); } }
@@ -1731,6 +1951,7 @@ public partial class MainWindow : Window
             _fullBounds = new Rect(Left, Top, Width, Height);
             BodyRow.Height = new GridLength(0); TitleRow.Height = new GridLength(0); Body.Visibility = Visibility.Collapsed; TitleBar.Visibility = Visibility.Collapsed;
             MinWidth = 320; MinHeight = 98; MaxHeight = 98; Width = 560; Height = 98; Topmost = true;
+            SuspendFullUi();
         }
         else
         {
@@ -1738,8 +1959,44 @@ public partial class MainWindow : Window
             Width = Math.Max(1040, _fullBounds.Width); Height = Math.Max(620, _fullBounds.Height); Left = _fullBounds.Left; Top = _fullBounds.Top;
             Body.Visibility = Visibility.Visible; BodyRow.Height = new GridLength(1, GridUnitType.Star); TitleRow.Height = new GridLength(58); TitleBar.Visibility = Visibility.Visible;
             Topmost = _pinned;
+            ResumeFullUi();
         }
         ApplyPlayerBarLayout();
+    }
+
+    private void SuspendFullUi()
+    {
+        if (_suspendedItemSources.Count != 0) return;
+        foreach (var control in new ItemsControl[]
+        {
+            HomeSections, MoodChips, SearchResults, ChatMessages, FavoritesList, SavedQueueList,
+            CollectionTrackList, QueueList, LyricsList, VideoCandidateList
+        })
+        {
+            _suspendedItemSources[control] = control.ItemsSource;
+            control.ItemsSource = null;
+        }
+        ContinueArtwork.Source = null;
+        CollectionArtwork.Source = null;
+        _continueArtworkUrl = null;
+        Dispatcher.BeginInvoke(() =>
+        {
+            GC.Collect(2, GCCollectionMode.Optimized, blocking: false, compacting: true);
+            TrimWorkingSet();
+            AppRuntime.TestLog("mini mode released full-window visuals");
+        }, DispatcherPriority.ContextIdle);
+    }
+
+    private void ResumeFullUi()
+    {
+        if (_suspendedItemSources.Count == 0) return;
+        foreach (var pair in _suspendedItemSources) pair.Key.ItemsSource = pair.Value;
+        _suspendedItemSources.Clear();
+        BindLibrary();
+        ChatMessages.ItemsSource = _chat;
+        VideoCandidateList.ItemsSource = _videoCandidates;
+        UpdateContinueListening(_player.CurrentTrack);
+        if (_collectionDetail is not null) SetImage(CollectionArtwork, _collectionDetail.ArtworkUrl);
     }
 
     private void ApplyPlayerBarLayout()
@@ -1881,6 +2138,35 @@ public partial class MainWindow : Window
         catch (Exception error) { AppRuntime.TestLog($"mini capture failed: {error}"); }
     }
 
+    private async Task CaptureFullViewAsync(string outputDirectory, string view)
+    {
+        try
+        {
+            if (view.Equals("saved", StringComparison.OrdinalIgnoreCase)) SavedNav_Click(SavedNav, new RoutedEventArgs());
+            else SetMode("settings");
+            Width = 1280;
+            Height = 800;
+            UpdateLayout();
+            await Dispatcher.Yield(DispatcherPriority.Render);
+            Directory.CreateDirectory(outputDirectory);
+            var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+            var bitmap = new RenderTargetBitmap(
+                Math.Max(1, (int)Math.Ceiling(ActualWidth * dpi.DpiScaleX)),
+                Math.Max(1, (int)Math.Ceiling(ActualHeight * dpi.DpiScaleY)),
+                96 * dpi.DpiScaleX,
+                96 * dpi.DpiScaleY,
+                System.Windows.Media.PixelFormats.Pbgra32);
+            bitmap.Render(this);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            var fileName = view.Equals("saved", StringComparison.OrdinalIgnoreCase) ? "saved-queues.png" : "settings.png";
+            await using var output = File.Create(Path.Combine(outputDirectory, fileName));
+            encoder.Save(output);
+            AppRuntime.TestLog($"captured {view} to {outputDirectory}");
+        }
+        catch (Exception error) { AppRuntime.TestLog($"{view} capture failed: {error}"); }
+    }
+
     private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e) { if (e.ClickCount == 2) WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized; else DragMove(); }
     private void PlayerBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -1914,6 +2200,10 @@ public partial class MainWindow : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetProcessWorkingSetSize(IntPtr process, IntPtr minimumWorkingSetSize, IntPtr maximumWorkingSetSize);
 
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(IntPtr handle);
+
     private async void ExitApp()
     {
         if (_reallyClose) return;
@@ -1938,6 +2228,8 @@ public partial class MainWindow : Window
         if (_tray is not null) _tray.Visible = false;
         _tray?.Dispose();
         _tray = null;
+        _trayAppearanceIcon?.Dispose();
+        _trayAppearanceIcon = null;
         _lyrics.Dispose();
         _videoCancel?.Cancel();
         try { VideoPlayer.Stop(); VideoPlayer.Source = null; } catch { }

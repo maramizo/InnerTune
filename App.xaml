@@ -1,7 +1,9 @@
 <Application x:Class="InnerTune.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:InnerTune">
   <Application.Resources>
+    <local:ArtworkImageConverter x:Key="ArtworkImage"/>
     <SolidColorBrush x:Key="Surface" Color="#121216"/>
     <SolidColorBrush x:Key="SurfaceRaised" Color="#24242B"/>
     <SolidColorBrush x:Key="Accent" Color="#9D7BFF"/>
@@ -37,8 +39,8 @@
     <Style TargetType="TextBox">
       <Setter Property="Background" Value="#27272E"/><Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
       <Setter Property="BorderBrush" Value="#3A3943"/><Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="Padding" Value="15,11"/><Setter Property="CaretBrush" Value="{StaticResource Accent}"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border x:Name="InputBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="20"><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/></Border><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="InputBorder" Property="BorderBrush" Value="{StaticResource Accent}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+      <Setter Property="Padding" Value="15,11"/><Setter Property="CaretBrush" Value="{DynamicResource Accent}"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border x:Name="InputBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="20"><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/></Border><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="InputBorder" Property="BorderBrush" Value="{DynamicResource Accent}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style TargetType="ListBox">
       <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
@@ -58,6 +60,19 @@
     <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
       <Setter Property="Width" Value="32"/><Setter Property="Height" Value="30"/><Setter Property="Padding" Value="0"/><Setter Property="Background" Value="Transparent"/><Setter Property="FontSize" Value="15"/><Setter Property="FontWeight" Value="Normal"/>
     </Style>
+    <Style x:Key="ChoiceCard" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="{StaticResource TextPrimary}"/>
+      <Setter Property="Background" Value="#1A1A20"/>
+      <Setter Property="BorderBrush" Value="#34323D"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Padding" Value="14"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RadioButton"><Border x:Name="Card" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Card" Property="Background" Value="#24232B"/></Trigger><Trigger Property="IsChecked" Value="True"><Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="Card" Property="Background" Value="#2B2638"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+    </Style>
+    <Style x:Key="ToggleSwitch" TargetType="CheckBox">
+      <Setter Property="Width" Value="42"/><Setter Property="Height" Value="24"/><Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="CheckBox"><Grid><Border x:Name="Track" Background="#3A3842" CornerRadius="12"/><Ellipse x:Name="Knob" Width="18" Height="18" Fill="#D6D3DC" HorizontalAlignment="Left" Margin="3"/></Grid><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Track" Property="Background" Value="{DynamicResource Accent}"/><Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/><Setter TargetName="Knob" Property="Fill" Value="#15111C"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+    </Style>
     <Style x:Key="FavoriteButton" TargetType="Button" BasedOn="{StaticResource IconButton}">
       <Setter Property="Content" Value="{Binding FavoriteGlyph}"/>
       <Setter Property="ToolTip" Value="{Binding FavoriteTooltip}"/>
@@ -73,7 +88,7 @@
     </Style>
     <Style x:Key="ScrollThumb" TargetType="Thumb">
       <Setter Property="MinHeight" Value="34"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Thumb"><Border x:Name="ThumbBody" Width="5" Margin="2,0" Background="#55515F" CornerRadius="3"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbBody" Property="Background" Value="#8F72E2"/></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbBody" Property="Background" Value="{StaticResource Accent}"/><Setter TargetName="ThumbBody" Property="Width" Value="7"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Thumb"><Border x:Name="ThumbBody" Width="5" Margin="2,0" Background="#55515F" CornerRadius="3"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="ThumbBody" Property="Background" Value="#8F72E2"/></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="ThumbBody" Property="Background" Value="{DynamicResource Accent}"/><Setter TargetName="ThumbBody" Property="Width" Value="7"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style TargetType="ScrollBar">
       <Setter Property="Width" Value="9"/><Setter Property="Background" Value="Transparent"/>
@@ -85,11 +100,11 @@
     </Style>
     <Style x:Key="SliderThumb" TargetType="Thumb">
       <Setter Property="Width" Value="12"/><Setter Property="Height" Value="12"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Thumb"><Ellipse x:Name="Knob" Fill="#C4B5FD" Stroke="#17171C" StrokeThickness="2"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Knob" Property="Fill" Value="White"/></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="Knob" Property="Fill" Value="{StaticResource Accent}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Thumb"><Ellipse x:Name="Knob" Fill="#C4B5FD" Stroke="#17171C" StrokeThickness="2"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Knob" Property="Fill" Value="White"/></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="Knob" Property="Fill" Value="{DynamicResource Accent}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style x:Key="ThemedSlider" TargetType="Slider">
       <Setter Property="Height" Value="18"/><Setter Property="IsMoveToPointEnabled" Value="True"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid Height="18" VerticalAlignment="Center"><Track x:Name="PART_Track"><Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource SliderTrackButton}" Background="{StaticResource Accent}" Command="{x:Static Slider.DecreaseLarge}"/></Track.DecreaseRepeatButton><Track.Thumb><Thumb Style="{StaticResource SliderThumb}"/></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource SliderTrackButton}" Background="#393640" Command="{x:Static Slider.IncreaseLarge}"/></Track.IncreaseRepeatButton></Track></Grid></ControlTemplate></Setter.Value></Setter>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid Height="18" VerticalAlignment="Center"><Track x:Name="PART_Track"><Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource SliderTrackButton}" Background="{DynamicResource Accent}" Command="{x:Static Slider.DecreaseLarge}"/></Track.DecreaseRepeatButton><Track.Thumb><Thumb Style="{StaticResource SliderThumb}"/></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource SliderTrackButton}" Background="#393640" Command="{x:Static Slider.IncreaseLarge}"/></Track.IncreaseRepeatButton></Track></Grid></ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style x:Key="VerticalSliderTrackButton" TargetType="RepeatButton">
       <Setter Property="Focusable" Value="False"/>
@@ -97,7 +112,7 @@
     </Style>
     <Style x:Key="VerticalThemedSlider" TargetType="Slider">
       <Setter Property="Width" Value="18"/><Setter Property="Height" Value="62"/><Setter Property="Orientation" Value="Vertical"/><Setter Property="IsMoveToPointEnabled" Value="True"/>
-      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid Width="18" HorizontalAlignment="Center"><Track x:Name="PART_Track" Orientation="Vertical"><Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource VerticalSliderTrackButton}" Background="{StaticResource Accent}" Command="{x:Static Slider.DecreaseLarge}"/></Track.DecreaseRepeatButton><Track.Thumb><Thumb Style="{StaticResource SliderThumb}"/></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource VerticalSliderTrackButton}" Background="#393640" Command="{x:Static Slider.IncreaseLarge}"/></Track.IncreaseRepeatButton></Track></Grid></ControlTemplate></Setter.Value></Setter>
+      <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid Width="18" HorizontalAlignment="Center"><Track x:Name="PART_Track" Orientation="Vertical"><Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource VerticalSliderTrackButton}" Background="{DynamicResource Accent}" Command="{x:Static Slider.DecreaseLarge}"/></Track.DecreaseRepeatButton><Track.Thumb><Thumb Style="{StaticResource SliderThumb}"/></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource VerticalSliderTrackButton}" Background="#393640" Command="{x:Static Slider.IncreaseLarge}"/></Track.IncreaseRepeatButton></Track></Grid></ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style TargetType="TabItem">
       <Setter Property="Foreground" Value="{StaticResource TextMuted}"/><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="16,10"/><Setter Property="FontWeight" Value="SemiBold"/>

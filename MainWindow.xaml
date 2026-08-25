@@ -10,7 +10,7 @@
   <shell:WindowChrome.WindowChrome>
     <shell:WindowChrome CaptionHeight="0" ResizeBorderThickness="6" CornerRadius="12" GlassFrameThickness="0"/>
   </shell:WindowChrome.WindowChrome>
-  <Border Background="#0B0B0E" BorderBrush="#28272F" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
+  <Border x:Name="WindowSurface" Background="#0B0B0E" BorderBrush="#28272F" BorderThickness="1" CornerRadius="12" ClipToBounds="True">
     <Grid>
       <Grid.RowDefinitions>
         <RowDefinition x:Name="TitleRow" Height="58"/>
@@ -20,7 +20,7 @@
 
       <Grid x:Name="TitleBar" Grid.Row="0" Background="#0D0D10" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0">
-          <Border Width="34" Height="34" CornerRadius="10" Background="#201A2C" Padding="2"><Image Source="Assets/InnerTune-DJCat.png" Stretch="Uniform"/></Border>
+          <Border Width="34" Height="34" CornerRadius="10" Background="#201A2C" Padding="2"><Image x:Name="TitleLogo" Source="Assets/InnerTune-DJCat.png" Stretch="Uniform"/></Border>
           <TextBlock Text="InnerTune" FontSize="16" FontWeight="Bold" Margin="10,0,0,0" VerticalAlignment="Center"/>
         </StackPanel>
         <Border x:Name="StatusPill" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#25242C" CornerRadius="15" Padding="13,6">
@@ -36,8 +36,9 @@
       <Grid x:Name="Body" Grid.Row="1">
         <Grid.ColumnDefinitions><ColumnDefinition Width="206"/><ColumnDefinition Width="*"/><ColumnDefinition Width="336"/></Grid.ColumnDefinitions>
 
-        <Border Grid.Column="0" Background="#101014" BorderBrush="#242329" BorderThickness="0,0,1,0" Padding="14,22,14,16">
+        <Border x:Name="NavigationSurface" Grid.Column="0" Background="#101014" BorderBrush="#242329" BorderThickness="0,0,1,0" Padding="14,22,14,16">
           <DockPanel>
+            <Button x:Name="SettingsNav" DockPanel.Dock="Bottom" Style="{StaticResource NavButton}" Content="Settings" Click="SettingsNav_Click"/>
             <StackPanel DockPanel.Dock="Top">
               <TextBlock Text="EXPLORE" FontSize="10" Foreground="#696771" Margin="16,0,0,10" FontWeight="Bold"/>
               <Button x:Name="HomeNav" Style="{StaticResource NavButton}" Content="Home" Click="HomeNav_Click"/>
@@ -50,8 +51,8 @@
           </DockPanel>
         </Border>
 
-        <Grid Grid.Column="1">
-          <Grid.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop Color="#211B33"/><GradientStop Color="#111115" Offset="0.32"/><GradientStop Color="#101014" Offset="1"/></LinearGradientBrush></Grid.Background>
+        <Grid x:Name="ContentSurface" Grid.Column="1">
+          <Grid.Background><LinearGradientBrush StartPoint="0,0" EndPoint="0,1"><GradientStop x:Name="ContentGlow" Color="#211B33"/><GradientStop x:Name="ContentMid" Color="#111115" Offset="0.32"/><GradientStop x:Name="ContentBase" Color="#101014" Offset="1"/></LinearGradientBrush></Grid.Background>
           <Grid Margin="34,28,34,22">
             <Grid x:Name="HomePanel" Visibility="Collapsed">
               <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
@@ -112,7 +113,7 @@
                                 <Border Width="154" Margin="0,0,11,0" Padding="8" Background="#18181D" CornerRadius="13" Cursor="Hand" MouseLeftButtonUp="DiscoveryCard_Click">
                                   <Grid>
                                     <Grid.RowDefinitions><RowDefinition Height="138"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                                    <Border Background="#292830" CornerRadius="9"><Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/></Border>
+                                    <Border Background="#292830" CornerRadius="9"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=192}" Stretch="UniformToFill"/></Border>
                                     <TextBlock Grid.Row="1" Text="{Binding Title}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis" Margin="2,9,2,0"/>
                                     <TextBlock Grid.Row="2" Text="{Binding Subtitle}" Foreground="#8E8A96" FontSize="9" TextTrimming="CharacterEllipsis" Margin="2,4,2,0"/>
                                     <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0">
@@ -159,7 +160,7 @@
                         <Grid Height="58" Margin="8,0">
                           <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="46"/><ColumnDefinition Width="*"/><ColumnDefinition Width="48"/><ColumnDefinition Width="34"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
                           <TextBlock Text="{Binding Number}" Foreground="#777480" FontSize="9" VerticalAlignment="Center"/>
-                          <Border Grid.Column="1" Width="38" Height="38" CornerRadius="6" Background="#292830"><Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/></Border>
+                          <Border Grid.Column="1" Width="38" Height="38" CornerRadius="6" Background="#292830"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=64}" Stretch="UniformToFill"/></Border>
                           <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="9,0"><TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="11" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" Foreground="{StaticResource TextMuted}" FontSize="9" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/></StackPanel>
                           <TextBlock Grid.Column="3" Text="{Binding DurationText}" Foreground="#777480" FontSize="9" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                           <Button Grid.Column="4" Style="{StaticResource FavoriteButton}" Width="28" Height="28" Click="FavoriteTrack_Click"/>
@@ -193,7 +194,7 @@
                   <ListBox.ItemTemplate><DataTemplate>
                     <Grid Height="70" Margin="10,0">
                       <Grid.ColumnDefinitions><ColumnDefinition Width="62"/><ColumnDefinition Width="*"/><ColumnDefinition Width="54"/><ColumnDefinition Width="34"/><ColumnDefinition Width="58"/><ColumnDefinition Width="68"/></Grid.ColumnDefinitions>
-                      <Border Width="50" Height="50" CornerRadius="7" Background="#2C2A32" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/></Border>
+                      <Border Width="50" Height="50" CornerRadius="7" Background="#2C2A32" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=80}" Stretch="UniformToFill"/></Border>
                       <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                         <TextBlock Text="{Binding Subtitle}" FontSize="10" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,4,8,0"/>
@@ -220,13 +221,13 @@
                     <Border x:Name="Bubble" Background="#232329" BorderBrush="Transparent" BorderThickness="1" CornerRadius="15" Padding="15,11" Margin="2,5" MaxWidth="720" HorizontalAlignment="Left">
                       <StackPanel>
                         <TextBlock x:Name="RoleLabel" Text="{Binding Role}" Foreground="#B8A5EA" FontSize="9" FontWeight="Bold"/>
-                        <TextBox x:Name="MessageText" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" IsReadOnlyCaretVisible="True" AcceptsReturn="True" TextWrapping="Wrap" Background="Transparent" BorderThickness="0" Padding="0" Margin="0,4,0,0" Foreground="{StaticResource TextPrimary}" SelectionBrush="{StaticResource Accent}" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Disabled"/>
+                        <TextBox x:Name="MessageText" Text="{Binding Text, Mode=OneWay}" IsReadOnly="True" IsReadOnlyCaretVisible="True" AcceptsReturn="True" TextWrapping="Wrap" Background="Transparent" BorderThickness="0" Padding="0" Margin="0,4,0,0" Foreground="{StaticResource TextPrimary}" SelectionBrush="{DynamicResource Accent}" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Disabled"/>
                         <Expander x:Name="ResultExpander" IsExpanded="False" Foreground="#C2CEC7" Margin="0,4,0,0">
                           <Expander.Style><Style TargetType="Expander"><Setter Property="Visibility" Value="Collapsed"/></Style></Expander.Style>
                           <Expander.Header>
                             <StackPanel Margin="3,1,0,1"><TextBlock Text="{Binding Summary}" Foreground="#77C89B" FontFamily="Cascadia Mono,Consolas" FontSize="11"/><TextBlock Text="Show tool output" Foreground="#858D88" FontSize="9" Margin="0,2,0,0"/></StackPanel>
                           </Expander.Header>
-                          <TextBox Text="{Binding Details, Mode=OneWay}" IsReadOnly="True" IsReadOnlyCaretVisible="True" AcceptsReturn="True" TextWrapping="Wrap" Background="#111512" BorderBrush="#30453B" BorderThickness="1" Padding="10,8" Margin="0,8,0,0" Foreground="#C2CEC7" FontFamily="Cascadia Mono,Consolas" FontSize="11" SelectionBrush="{StaticResource Accent}" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Disabled"/>
+                          <TextBox Text="{Binding Details, Mode=OneWay}" IsReadOnly="True" IsReadOnlyCaretVisible="True" AcceptsReturn="True" TextWrapping="Wrap" Background="#111512" BorderBrush="#30453B" BorderThickness="1" Padding="10,8" Margin="0,8,0,0" Foreground="#C2CEC7" FontFamily="Cascadia Mono,Consolas" FontSize="11" SelectionBrush="{DynamicResource Accent}" VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Disabled"/>
                         </Expander>
                       </StackPanel>
                     </Border>
@@ -264,7 +265,7 @@
                   <Grid>
                   <StackPanel x:Name="FavoritesEmpty" VerticalAlignment="Center" Margin="0,0,0,60"><TextBlock Text="No liked songs yet" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Use the heart beside any song to keep it here." Foreground="{StaticResource TextMuted}" Margin="0,7,0,0" HorizontalAlignment="Center"/></StackPanel>
                   <ListBox x:Name="FavoritesList" Margin="0,12,0,0">
-                    <ListBox.ItemTemplate><DataTemplate><Grid Height="62" Margin="10,0"><Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="62"/><ColumnDefinition Width="86"/></Grid.ColumnDefinitions><Border Width="42" Height="42" CornerRadius="7" Background="#2C2A32"><Image Source="{Binding Track.ArtworkUrl}" Stretch="UniformToFill"/></Border><StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding Track.Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Track.Artist}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding FolderPath}" Foreground="#777580" FontSize="9"/></StackPanel><Button Grid.Column="2" Content="Add" Margin="4" Click="AddFavorite_Click"/><Button Grid.Column="3" Content="Remove" Background="Transparent" Margin="4" Click="Unfavorite_Click"/></Grid></DataTemplate></ListBox.ItemTemplate>
+                    <ListBox.ItemTemplate><DataTemplate><Grid Height="62" Margin="10,0"><Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="62"/><ColumnDefinition Width="86"/></Grid.ColumnDefinitions><Border Width="42" Height="42" CornerRadius="7" Background="#2C2A32"><Image Source="{Binding Track.ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=72}" Stretch="UniformToFill"/></Border><StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding Track.Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Track.Artist}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding FolderPath}" Foreground="#777580" FontSize="9"/></StackPanel><Button Grid.Column="2" Content="Add" Margin="4" Click="AddFavorite_Click"/><Button Grid.Column="3" Content="Remove" Background="Transparent" Margin="4" Click="Unfavorite_Click"/></Grid></DataTemplate></ListBox.ItemTemplate>
                   </ListBox>
                   </Grid>
                 </TabItem>
@@ -277,7 +278,7 @@
                     <ListBox.ItemTemplate><DataTemplate>
                       <Grid Margin="5,3">
                         <Grid.RowDefinitions><RowDefinition Height="58"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                        <Border Background="#19191E" CornerRadius="12"/>
+                        <Border x:Name="SavedQueueBackground" Background="#19191E" BorderBrush="Transparent" BorderThickness="1" CornerRadius="12"/>
                         <Grid>
                           <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="40"/><ColumnDefinition Width="40"/><ColumnDefinition Width="40"/></Grid.ColumnDefinitions>
                           <ToggleButton x:Name="SavedQueueToggle" HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0" Foreground="{StaticResource TextPrimary}" Cursor="Hand">
@@ -285,14 +286,15 @@
                               <Border x:Name="QueueHeader" Background="Transparent" CornerRadius="12" Padding="9,0">
                                 <Grid>
                                   <Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition Width="*"/><ColumnDefinition Width="26"/></Grid.ColumnDefinitions>
-                                  <Border Width="40" Height="40" CornerRadius="8" Background="#302A42" HorizontalAlignment="Left"><Image Source="{Binding CoverUrl}" Stretch="UniformToFill"/></Border>
-                                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,8,0"><TextBlock Text="{Binding DisplayPath}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Tracks.Count, StringFormat={}{0} songs}" Foreground="{StaticResource TextMuted}" FontSize="9" Margin="0,3,0,0"/></StackPanel>
+                                  <Border Width="40" Height="40" CornerRadius="8" Background="#302A42" HorizontalAlignment="Left"><Image Source="{Binding CoverUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=72}" Stretch="UniformToFill"/></Border>
+                                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,8,0"><StackPanel Orientation="Horizontal"><TextBlock Text="{Binding DisplayPath}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis"/><Border x:Name="PlayingBadge" Visibility="Collapsed" Background="{DynamicResource Accent}" CornerRadius="7" Margin="8,0,0,0" Padding="6,2"><TextBlock Text="PLAYING" Foreground="#17121F" FontSize="7" FontWeight="Bold"/></Border></StackPanel><TextBlock Text="{Binding Tracks.Count, StringFormat={}{0} songs}" Foreground="{StaticResource TextMuted}" FontSize="9" Margin="0,3,0,0"/></StackPanel>
                                   <TextBlock x:Name="QueueChevron" Grid.Column="2" Text="›" FontSize="20" Foreground="#9B96A4" VerticalAlignment="Center" HorizontalAlignment="Center" RenderTransformOrigin="0.5,0.5"><TextBlock.RenderTransform><RotateTransform Angle="0"/></TextBlock.RenderTransform></TextBlock>
                                 </Grid>
                               </Border>
                               <ControlTemplate.Triggers>
                                 <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="QueueHeader" Property="Background" Value="#232229"/></Trigger>
                                 <Trigger Property="IsChecked" Value="True"><Setter TargetName="QueueHeader" Property="Background" Value="#25222D"/><Setter TargetName="QueueChevron" Property="RenderTransform"><Setter.Value><RotateTransform Angle="90"/></Setter.Value></Setter></Trigger>
+                                <DataTrigger Binding="{Binding IsActive}" Value="True"><Setter TargetName="PlayingBadge" Property="Visibility" Value="Visible"/><Setter TargetName="QueueHeader" Property="Background" Value="#241F30"/></DataTrigger>
                               </ControlTemplate.Triggers>
                             </ControlTemplate>
                             </ToggleButton.Template>
@@ -307,7 +309,7 @@
                               <Border Height="48" Padding="6,0" CornerRadius="7" Cursor="Hand" Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListBox}}" MouseLeftButtonUp="SavedTrack_Click">
                                 <Grid>
                                   <Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/><ColumnDefinition Width="34"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>
-                                  <Border Width="34" Height="34" CornerRadius="5" Background="#292830" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/></Border>
+                                  <Border Width="34" Height="34" CornerRadius="5" Background="#292830" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=64}" Stretch="UniformToFill"/></Border>
                                   <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,8,0"><TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" FontSize="9" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/></StackPanel>
                                   <Button Grid.Column="2" Style="{StaticResource FavoriteButton}" Width="28" Height="28" Click="FavoriteTrack_Click"/>
                                   <TextBlock Grid.Column="3" Text="{Binding DurationText}" Foreground="#85818D" FontSize="9" HorizontalAlignment="Right" VerticalAlignment="Center"/>
@@ -317,12 +319,42 @@
                           </ListBox>
                         </Border>
                       </Grid>
-                      <DataTemplate.Triggers><DataTrigger Binding="{Binding IsChecked, ElementName=SavedQueueToggle}" Value="True"><Setter TargetName="SavedQueueSongs" Property="Visibility" Value="Visible"/></DataTrigger></DataTemplate.Triggers>
+                      <DataTemplate.Triggers><DataTrigger Binding="{Binding IsChecked, ElementName=SavedQueueToggle}" Value="True"><Setter TargetName="SavedQueueSongs" Property="Visibility" Value="Visible"/></DataTrigger><DataTrigger Binding="{Binding IsActive}" Value="True"><Setter TargetName="SavedQueueBackground" Property="BorderBrush" Value="{DynamicResource Accent}"/><Setter TargetName="SavedQueueBackground" Property="Background" Value="#241F30"/></DataTrigger></DataTemplate.Triggers>
                     </DataTemplate></ListBox.ItemTemplate>
                   </ListBox>
                   </Grid>
                 </TabItem>
               </TabControl>
+            </Grid>
+
+            <Grid x:Name="SettingsPanel" Visibility="Collapsed">
+              <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+              <StackPanel><TextBlock Text="Settings" FontSize="32" FontWeight="Bold"/><TextBlock Text="Make InnerTune look and behave the way you want." Foreground="{StaticResource TextMuted}" Margin="1,7,0,0"/></StackPanel>
+              <ScrollViewer Grid.Row="1" Margin="0,24,0,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,0,8,24">
+                  <TextBlock Text="THEME" Foreground="#777480" FontSize="9" FontWeight="Bold"/>
+                  <TextBlock Text="Choose the atmosphere" FontSize="17" FontWeight="SemiBold" Margin="0,5,0,12"/>
+                  <UniformGrid Columns="3" Margin="0,0,0,30">
+                    <RadioButton x:Name="MidnightThemeChoice" GroupName="Theme" Tag="midnight" Style="{StaticResource ChoiceCard}" Margin="0,0,8,0" Click="ThemeChoice_Click"><StackPanel><Border Height="46" CornerRadius="8" Background="#17131F"><Border Width="52" Height="6" CornerRadius="3" Background="#9D7BFF" HorizontalAlignment="Left" Margin="10"/></Border><TextBlock Text="Midnight" FontWeight="SemiBold" Margin="0,9,0,0"/><TextBlock Text="Deep violet" Foreground="{StaticResource TextMuted}" FontSize="9" Margin="0,3,0,0"/></StackPanel></RadioButton>
+                    <RadioButton x:Name="GraphiteThemeChoice" GroupName="Theme" Tag="graphite" Style="{StaticResource ChoiceCard}" Margin="4,0" Click="ThemeChoice_Click"><StackPanel><Border Height="46" CornerRadius="8" Background="#121719"><Border Width="52" Height="6" CornerRadius="3" Background="#63D8C8" HorizontalAlignment="Left" Margin="10"/></Border><TextBlock Text="Graphite" FontWeight="SemiBold" Margin="0,9,0,0"/><TextBlock Text="Calm teal" Foreground="{StaticResource TextMuted}" FontSize="9" Margin="0,3,0,0"/></StackPanel></RadioButton>
+                    <RadioButton x:Name="OledThemeChoice" GroupName="Theme" Tag="oled" Style="{StaticResource ChoiceCard}" Margin="8,0,0,0" Click="ThemeChoice_Click"><StackPanel><Border Height="46" CornerRadius="8" Background="#000"><Border Width="52" Height="6" CornerRadius="3" Background="#FF69A8" HorizontalAlignment="Left" Margin="10"/></Border><TextBlock Text="OLED" FontWeight="SemiBold" Margin="0,9,0,0"/><TextBlock Text="Pure black" Foreground="{StaticResource TextMuted}" FontSize="9" Margin="0,3,0,0"/></StackPanel></RadioButton>
+                  </UniformGrid>
+
+                  <TextBlock Text="APP ICON" Foreground="#777480" FontSize="9" FontWeight="Bold"/>
+                  <TextBlock Text="Pick an identity" FontSize="17" FontWeight="SemiBold" Margin="0,5,0,12"/>
+                  <UniformGrid Columns="3" Margin="0,0,0,9">
+                    <RadioButton x:Name="DjCatIconChoice" GroupName="Icon" Tag="dj-cat" Style="{StaticResource ChoiceCard}" Margin="0,0,8,0" Click="IconChoice_Click"><StackPanel><Image Source="Assets/InnerTune-DJCat.png" Width="46" Height="46" Stretch="Uniform" HorizontalAlignment="Left"/><TextBlock Text="DJ Cat" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel></RadioButton>
+                    <RadioButton x:Name="MinimalIconChoice" GroupName="Icon" Tag="minimal" Style="{StaticResource ChoiceCard}" Margin="4,0" Click="IconChoice_Click"><StackPanel><Border Width="46" Height="46" CornerRadius="12" Background="#9D7BFF" HorizontalAlignment="Left"><Path Width="22" Height="25" Stretch="Uniform" Stroke="#17121F" StrokeThickness="1.8" StrokeStartLineCap="Round" Data="M12,3 V16 M12,6 L20,4 V14 M12,16 A4,3 0 1 1 8,13 A4,3 0 0 1 12,16 M20,14 A4,3 0 1 1 16,11 A4,3 0 0 1 20,14"/></Border><TextBlock Text="Minimal" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel></RadioButton>
+                    <RadioButton x:Name="CustomIconChoice" GroupName="Icon" Tag="custom" Style="{StaticResource ChoiceCard}" Margin="8,0,0,0" Click="IconChoice_Click"><StackPanel><Border Width="46" Height="46" CornerRadius="12" Background="#24232B" BorderBrush="#514C5F" BorderThickness="1" HorizontalAlignment="Left"><Image x:Name="CustomIconPreview" Stretch="UniformToFill"/></Border><TextBlock Text="Custom" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel></RadioButton>
+                  </UniformGrid>
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,30"><Button Content="Choose image…" Padding="14,6" Click="ChooseCustomIcon_Click"/><TextBlock x:Name="CustomIconHint" Text="PNG, JPG, or ICO" Foreground="{StaticResource TextMuted}" FontSize="9" VerticalAlignment="Center" Margin="10,0,0,0"/></StackPanel>
+
+                  <TextBlock Text="PLAYBACK" Foreground="#777480" FontSize="9" FontWeight="Bold"/>
+                  <Border Background="#19191E" BorderBrush="#34323D" BorderThickness="1" CornerRadius="12" Padding="15" Margin="0,8,0,0">
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Resume playback on start" FontWeight="SemiBold"/><TextBlock Text="If InnerTune was playing when it closed, continue that song automatically next time." Foreground="{StaticResource TextMuted}" FontSize="9" Margin="0,5,16,0" TextWrapping="Wrap"/></StackPanel><CheckBox x:Name="AutoResumeToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center" Checked="AutoResumeToggle_Changed" Unchecked="AutoResumeToggle_Changed"/></Grid>
+                  </Border>
+                </StackPanel>
+              </ScrollViewer>
             </Grid>
           </Grid>
 
@@ -390,7 +422,7 @@
           </Grid>
         </Grid>
 
-        <Border Grid.Column="2" Background="#111115" BorderBrush="#242329" BorderThickness="1,0,0,0" Padding="18,16,18,16">
+        <Border x:Name="QueueSurface" Grid.Column="2" Background="#111115" BorderBrush="#242329" BorderThickness="1,0,0,0" Padding="18,16,18,16">
           <Grid>
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
             <Border Background="#19191E" CornerRadius="16" Padding="3" HorizontalAlignment="Left" Margin="2,0,0,16">
@@ -420,7 +452,7 @@
                   <ListBox.ItemTemplate><DataTemplate>
                     <Grid Height="62" Margin="7,0">
                       <Grid.ColumnDefinitions><ColumnDefinition Width="46"/><ColumnDefinition Width="*"/><ColumnDefinition Width="34"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
-                      <Border Width="40" Height="40" CornerRadius="6" Background="#2C2A32" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/></Border>
+                      <Border Width="40" Height="40" CornerRadius="6" Background="#2C2A32" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=72}" Stretch="UniformToFill"/></Border>
                       <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="3,0,7,0"><TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" FontSize="9" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/></StackPanel>
                       <Button Grid.Column="2" Style="{StaticResource FavoriteButton}" Width="30" Height="30" Click="FavoriteTrack_Click"/>
                       <Button Grid.Column="3" Style="{StaticResource IconButton}" Width="30" Height="30" Content="×" ToolTip="Remove" Click="RemoveQueue_Click"/>
@@ -467,7 +499,7 @@
         </Border>
       </Grid>
 
-      <Border Grid.Row="2" Background="#17171C" BorderBrush="#2A2931" BorderThickness="0,1,0,0" Margin="1,0,1,1">
+      <Border x:Name="PlayerSurface" Grid.Row="2" Background="#17171C" BorderBrush="#2A2931" BorderThickness="0,1,0,0" Margin="1,0,1,1">
         <Grid x:Name="PlayerBar" Background="Transparent" PreviewMouseLeftButtonDown="PlayerBar_MouseLeftButtonDown">
           <Grid.ColumnDefinitions><ColumnDefinition x:Name="NowPlayingColumn" Width="2.2*"/><ColumnDefinition x:Name="TransportColumn" Width="3*"/><ColumnDefinition x:Name="UtilityColumn" Width="2.2*"/></Grid.ColumnDefinitions>
           <Grid x:Name="NowPlayingSection" Margin="18,10" Background="Transparent" Cursor="Hand" MouseEnter="NowPlayingSection_MouseEnter" MouseLeave="NowPlayingSection_MouseLeave">
@@ -486,7 +518,7 @@
                       <Grid Height="42" Margin="7,0">
                         <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/><ColumnDefinition Width="38"/></Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding Number}" Foreground="#777480" FontSize="9" VerticalAlignment="Center"/>
-                        <Border Grid.Column="1" Width="30" Height="30" CornerRadius="5" Background="#292830" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl}" Stretch="UniformToFill"/></Border>
+                        <Border Grid.Column="1" Width="30" Height="30" CornerRadius="5" Background="#292830" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=56}" Stretch="UniformToFill"/></Border>
                         <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="6,0,8,0"><TextBlock Text="{Binding Title}" FontSize="10" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" Foreground="#96939E" FontSize="8" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/></StackPanel>
                         <TextBlock Grid.Column="3" Text="{Binding DurationText}" Foreground="#777480" FontSize="8" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                       </Grid>

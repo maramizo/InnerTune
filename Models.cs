@@ -61,8 +61,9 @@ public sealed class Favorite
     [JsonIgnore] public string FolderPath { get; set; } = "Favorites";
 }
 
-public sealed class SavedQueue
+public sealed class SavedQueue : INotifyPropertyChanged
 {
+    private bool _isActive;
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public string Name { get; set; } = "Queue";
     public string? FolderId { get; set; }
@@ -72,6 +73,13 @@ public sealed class SavedQueue
     [JsonIgnore] public string DisplayPath { get; set; } = "";
     [JsonIgnore] public string Summary => $"{(string.IsNullOrWhiteSpace(DisplayPath) ? Name : DisplayPath)}  ·  {Tracks.Count} songs";
     [JsonIgnore] public string? CoverUrl => Tracks.FirstOrDefault()?.ArtworkUrl;
+    [JsonIgnore]
+    public bool IsActive
+    {
+        get => _isActive;
+        set { if (_isActive == value) return; _isActive = value; PropertyChanged?.Invoke(this, new(nameof(IsActive))); }
+    }
+    public event PropertyChangedEventHandler? PropertyChanged;
 }
 
 public sealed class PlaybackCommand
@@ -222,7 +230,16 @@ public sealed class LibraryData
     public ObservableCollection<HistoryEntry> RecentlyPlayed { get; set; } = [];
     public Dictionary<string, VideoSelection> VideoMappings { get; set; } = [];
     public List<PlaybackCommand> PendingCommands { get; set; } = [];
+    public AppSettings Settings { get; set; } = new();
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
+}
+
+public sealed class AppSettings
+{
+    public string Theme { get; set; } = "midnight";
+    public string Icon { get; set; } = "dj-cat";
+    public string? CustomIconPath { get; set; }
+    public bool AutoResumeOnStart { get; set; }
 }
 
 public sealed class ChatMessage

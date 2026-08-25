@@ -26,6 +26,8 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 - Use **Mini player** for the compact always-on-top widget.
 - Hover InnerTune on the Windows taskbar for Previous, Play/Pause, and Next; the taskbar icon also shows playback progress.
 - Windows media keys and system media controls show the current title, artist, album, artwork, timeline, and transport controls.
+- **Settings** includes Midnight, Graphite, and OLED themes; DJ Cat, Minimal, and custom local icons; and an opt-in playback resume setting. Automatic playback on startup is off by default.
+- The active saved queue is outlined and marked **Playing**. Editing the current queue removes that source marker.
 - Closing the window hides it to the notification area; use the tray menu to exit.
 
 Library state is stored locally at `%LOCALAPPDATA%\InnerTune\library.json`.
@@ -56,7 +58,18 @@ powershell -ExecutionPolicy Bypass -File .\diagnostics\capture-mini-hidden.ps1 `
   -LibraryPath "$env:LOCALAPPDATA\InnerTune\library.json"
 ```
 
-The harness attaches through UI Automation without moving the physical mouse. It leaves an already-running InnerTune process alone and deletes its disposable data when finished. Add `-KeepTestData` when diagnosing a failure.
+Capture the Settings page or measure three full/mini transitions without touching the running app:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\diagnostics\capture-settings-hidden.ps1 `
+  -ApplicationPath "$env:LOCALAPPDATA\Programs\InnerTune\InnerTune.exe"
+
+powershell -ExecutionPolicy Bypass -File .\diagnostics\test-mini-memory.ps1 `
+  -ApplicationPath "$env:LOCALAPPDATA\Programs\InnerTune\InnerTune.exe" `
+  -LibraryPath "$env:LOCALAPPDATA\InnerTune\library.json"
+```
+
+The harness attaches through UI Automation without moving the physical mouse. It leaves an already-running InnerTune process alone and deletes its disposable data when finished.
 
 ## Publish a release locally
 

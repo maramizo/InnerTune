@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$version = '1.1.7'
+$version = '1.1.8'
 $staging = Join-Path $env:TEMP "InnerTune-Installer-$version"
 $payload = Join-Path $staging 'payload'
 $installerScript = Join-Path $PSScriptRoot 'installer\InnerTune.iss'
