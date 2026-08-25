@@ -38,7 +38,10 @@ $hash = (Get-FileHash $installer -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $(Split-Path $installer -Leaf)" | Set-Content $checksum -Encoding ascii -NoNewline
 $assets = @($installer, $checksum)
 $publishAssets = if ($useWslGh) {
-    @($assets | ForEach-Object { (wsl.exe wslpath -a $_).Trim() })
+    @($assets | ForEach-Object {
+        $portablePath = $_.Replace('\', '/')
+        (wsl.exe wslpath -a $portablePath).Trim()
+    })
 } else { $assets }
 
 Invoke-GitHubCli @('release', 'view', $tag, '--repo', $Repository) *> $null
