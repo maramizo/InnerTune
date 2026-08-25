@@ -12,6 +12,7 @@ public sealed class Track : INotifyPropertyChanged
     public string Id { get; set; } = "";
     public string Title { get; set; } = "Unknown title";
     public string Artist { get; set; } = "Unknown artist";
+    public string? ArtistId { get; set; }
     public string? Album { get; set; }
     public int DurationSeconds { get; set; }
     public string DurationText { get; set; } = "--:--";

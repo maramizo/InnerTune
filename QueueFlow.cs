@@ -2,6 +2,21 @@ namespace InnerTune;
 
 public static class QueueFlow
 {
+    public static List<Track> ShuffleUnique(IEnumerable<Track> tracks, Random? random = null)
+    {
+        random ??= Random.Shared;
+        var shuffled = tracks
+            .Where(track => !string.IsNullOrWhiteSpace(track.Id))
+            .DistinctBy(track => track.Id, StringComparer.Ordinal)
+            .ToList();
+        for (var index = shuffled.Count - 1; index > 0; index--)
+        {
+            var other = random.Next(index + 1);
+            (shuffled[index], shuffled[other]) = (shuffled[other], shuffled[index]);
+        }
+        return shuffled;
+    }
+
     public static void StartStandalone(IList<Track> queue, Track track)
     {
         queue.Clear();

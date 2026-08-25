@@ -78,7 +78,7 @@
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="15,0,14,0">
                           <TextBlock Text="CONTINUE LISTENING" Foreground="#BCA8EF" FontSize="9" FontWeight="Bold"/>
                           <TextBlock x:Name="ContinueTitle" FontSize="18" FontWeight="Bold" TextTrimming="CharacterEllipsis" Margin="0,7,0,0"/>
-                          <TextBlock x:Name="ContinueArtist" Foreground="#C0BCC7" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,5,0,0"/>
+                          <TextBlock x:Name="ContinueArtist" Foreground="#C0BCC7" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,5,0,0" Cursor="Hand" ToolTip="Open artist" MouseLeftButtonUp="Artist_Click"/>
                           <TextBlock x:Name="ContinueContext" Foreground="#817D89" FontSize="9" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/>
                         </StackPanel>
                         <Button x:Name="ContinueButton" Grid.Column="2" Content="Resume" Background="#9D7BFF" Foreground="#17121F" Padding="18,7" Click="Continue_Click"/>
@@ -115,7 +115,7 @@
                                     <Grid.RowDefinitions><RowDefinition Height="138"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                                     <Border Background="#292830" CornerRadius="9"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=192}" Stretch="UniformToFill"/></Border>
                                     <TextBlock Grid.Row="1" Text="{Binding Title}" FontWeight="SemiBold" FontSize="12" TextTrimming="CharacterEllipsis" Margin="2,9,2,0"/>
-                                    <TextBlock Grid.Row="2" Text="{Binding Subtitle}" Foreground="#8E8A96" FontSize="9" TextTrimming="CharacterEllipsis" Margin="2,4,2,0"/>
+                                    <TextBlock Grid.Row="2" Text="{Binding Subtitle}" Foreground="#8E8A96" FontSize="9" TextTrimming="CharacterEllipsis" Margin="2,4,2,0" Cursor="Hand" MouseLeftButtonUp="Artist_Click"/>
                                     <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,8,0,0">
                                       <Button Content="{Binding PrimaryAction}" Padding="12,5" Click="DiscoveryPrimary_Click"/>
                                       <Button x:Name="AddDiscoveryButton" Content="+" Style="{StaticResource IconButton}" Width="28" Height="28" Margin="4,0,0,0" ToolTip="Add to queue" Click="AddDiscovery_Click" Visibility="Collapsed"/>
@@ -161,7 +161,7 @@
                           <Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="46"/><ColumnDefinition Width="*"/><ColumnDefinition Width="48"/><ColumnDefinition Width="48"/><ColumnDefinition Width="34"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
                           <TextBlock Text="{Binding Number}" Foreground="#777480" FontSize="9" VerticalAlignment="Center"/>
                           <Border Grid.Column="1" Width="38" Height="38" CornerRadius="6" Background="#292830"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=64}" Stretch="UniformToFill"/></Border>
-                          <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="9,0"><TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="11" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" Foreground="{StaticResource TextMuted}" FontSize="9" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/></StackPanel>
+                          <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="9,0"><TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="11" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" Foreground="{StaticResource TextMuted}" FontSize="9" TextTrimming="CharacterEllipsis" Margin="0,3,0,0" Cursor="Hand" ToolTip="Open artist" MouseLeftButtonUp="Artist_Click"/></StackPanel>
                           <TextBlock Grid.Column="3" Text="{Binding DurationText}" Foreground="#777480" FontSize="9" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                           <Button Grid.Column="4" Content="Next" Background="Transparent" Padding="6,4" FontSize="9" ToolTip="Play next" Click="PlayNextCollectionTrack_Click"/>
                           <Button Grid.Column="5" Style="{StaticResource FavoriteButton}" Width="28" Height="28" Click="FavoriteTrack_Click"/>
@@ -198,7 +198,7 @@
                       <Border Width="50" Height="50" CornerRadius="7" Background="#2C2A32" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=80}" Stretch="UniformToFill"/></Border>
                       <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock Text="{Binding Subtitle}" FontSize="10" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,4,8,0"/>
+                        <TextBlock Text="{Binding Artist}" FontSize="10" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,4,8,0" Cursor="Hand" ToolTip="{Binding Subtitle}" MouseLeftButtonUp="Artist_Click"/>
                       </StackPanel>
                       <TextBlock Grid.Column="2" Text="{Binding DurationText}" Foreground="#85828D" VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="10"/>
                       <Button Grid.Column="3" Style="{StaticResource FavoriteButton}" Width="30" Height="30" Click="FavoriteTrack_Click"/>
@@ -267,14 +267,17 @@
                   <Grid>
                   <StackPanel x:Name="FavoritesEmpty" VerticalAlignment="Center" Margin="0,0,0,60"><TextBlock Text="No liked songs yet" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Use the heart beside any song to keep it here." Foreground="{StaticResource TextMuted}" Margin="0,7,0,0" HorizontalAlignment="Center"/></StackPanel>
                   <ListBox x:Name="FavoritesList" Margin="0,12,0,0">
-                    <ListBox.ItemTemplate><DataTemplate><Grid Height="62" Margin="10,0"><Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="54"/><ColumnDefinition Width="54"/><ColumnDefinition Width="54"/><ColumnDefinition Width="70"/></Grid.ColumnDefinitions><Border Width="42" Height="42" CornerRadius="7" Background="#2C2A32"><Image Source="{Binding Track.ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=72}" Stretch="UniformToFill"/></Border><StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding Track.Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Track.Artist}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding FolderPath}" Foreground="#777580" FontSize="9"/></StackPanel><Button Grid.Column="2" Content="Play" Background="Transparent" Margin="3" Click="PlayFavorite_Click"/><Button Grid.Column="3" Content="Next" Background="Transparent" Margin="3" ToolTip="Play next" Click="PlayNextFavorite_Click"/><Button Grid.Column="4" Content="Add" Margin="3" Click="AddFavorite_Click"/><Button Grid.Column="5" Content="Remove" Background="Transparent" Margin="3" Click="Unfavorite_Click"/></Grid></DataTemplate></ListBox.ItemTemplate>
+                    <ListBox.ItemTemplate><DataTemplate><Grid Height="62" Margin="10,0"><Grid.ColumnDefinitions><ColumnDefinition Width="54"/><ColumnDefinition Width="*"/><ColumnDefinition Width="54"/><ColumnDefinition Width="54"/><ColumnDefinition Width="54"/><ColumnDefinition Width="70"/></Grid.ColumnDefinitions><Border Width="42" Height="42" CornerRadius="7" Background="#2C2A32"><Image Source="{Binding Track.ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=72}" Stretch="UniformToFill"/></Border><StackPanel Grid.Column="1" VerticalAlignment="Center"><TextBlock Text="{Binding Track.Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Track.Artist}" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,3,0,0" TextTrimming="CharacterEllipsis" Cursor="Hand" ToolTip="Open artist" MouseLeftButtonUp="Artist_Click"/><TextBlock Text="{Binding FolderPath}" Foreground="#777580" FontSize="9"/></StackPanel><Button Grid.Column="2" Content="Play" Background="Transparent" Margin="3" Click="PlayFavorite_Click"/><Button Grid.Column="3" Content="Next" Background="Transparent" Margin="3" ToolTip="Play next" Click="PlayNextFavorite_Click"/><Button Grid.Column="4" Content="Add" Margin="3" Click="AddFavorite_Click"/><Button Grid.Column="5" Content="Remove" Background="Transparent" Margin="3" Click="Unfavorite_Click"/></Grid></DataTemplate></ListBox.ItemTemplate>
                   </ListBox>
                   </Grid>
                 </TabItem>
                 <TabItem Header="Saved queues">
                   <Grid>
                   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                  <Button Content="Import link" HorizontalAlignment="Right" Background="Transparent" Padding="12,5" Margin="0,0,5,4" Click="ImportPlaylist_Click"/>
+                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,5,4">
+                    <Button x:Name="ShuffleAllQueuesButton" Content="Shuffle all" Background="#8B6CE8" Padding="13,5" Margin="0,0,6,0" ToolTip="Shuffle songs from every saved queue" Click="ShuffleAllQueues_Click"/>
+                    <Button Content="Import link" Background="Transparent" Padding="12,5" Click="ImportPlaylist_Click"/>
+                  </StackPanel>
                   <StackPanel x:Name="SavedQueuesEmpty" Grid.Row="1" VerticalAlignment="Center" Margin="0,0,0,60"><TextBlock Text="No saved queues yet" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Save a queue or import an InnerTune playlist link." Foreground="{StaticResource TextMuted}" Margin="0,7,0,0" HorizontalAlignment="Center"/></StackPanel>
                   <ListBox x:Name="SavedQueueList" Grid.Row="1" Margin="0,6,0,0">
                     <ListBox.ItemTemplate><DataTemplate>
@@ -312,7 +315,7 @@
                                 <Grid>
                                   <Grid.ColumnDefinitions><ColumnDefinition Width="42"/><ColumnDefinition Width="*"/><ColumnDefinition Width="34"/><ColumnDefinition Width="48"/></Grid.ColumnDefinitions>
                                   <Border Width="34" Height="34" CornerRadius="5" Background="#292830" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=64}" Stretch="UniformToFill"/></Border>
-                                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,8,0"><TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" FontSize="9" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0"/></StackPanel>
+                                  <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="2,0,8,0"><TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" FontSize="9" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" Cursor="Hand" ToolTip="Open artist" MouseLeftButtonUp="Artist_Click"/></StackPanel>
                                   <Button Grid.Column="2" Style="{StaticResource FavoriteButton}" Width="28" Height="28" Click="FavoriteTrack_Click"/>
                                   <TextBlock Grid.Column="3" Text="{Binding DurationText}" Foreground="#85818D" FontSize="9" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                                 </Grid>
@@ -459,7 +462,7 @@
                     <Grid Height="62" Margin="7,0">
                       <Grid.ColumnDefinitions><ColumnDefinition Width="46"/><ColumnDefinition Width="*"/><ColumnDefinition Width="46"/><ColumnDefinition Width="34"/><ColumnDefinition Width="34"/></Grid.ColumnDefinitions>
                       <Border Width="40" Height="40" CornerRadius="6" Background="#2C2A32" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=72}" Stretch="UniformToFill"/></Border>
-                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="3,0,7,0"><TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" FontSize="9" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/></StackPanel>
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="3,0,7,0"><TextBlock Text="{Binding Title}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" FontSize="9" Foreground="{StaticResource TextMuted}" TextTrimming="CharacterEllipsis" Margin="0,3,0,0" Cursor="Hand" ToolTip="Open artist" MouseLeftButtonUp="Artist_Click"/></StackPanel>
                       <Button Grid.Column="2" Content="Next" Background="Transparent" Padding="5,4" FontSize="9" ToolTip="Play next" Click="PlayNextQueue_Click"/>
                       <Button Grid.Column="3" Style="{StaticResource FavoriteButton}" Width="30" Height="30" Click="FavoriteTrack_Click"/>
                       <Button Grid.Column="4" Style="{StaticResource IconButton}" Width="30" Height="30" Content="×" ToolTip="Remove" Click="RemoveQueue_Click"/>
@@ -513,7 +516,7 @@
             <Grid.ColumnDefinitions><ColumnDefinition x:Name="ArtworkColumn" Width="62"/><ColumnDefinition x:Name="NowTextColumn" Width="*"/></Grid.ColumnDefinitions>
             <Grid.RowDefinitions><RowDefinition x:Name="ArtworkRow" Height="*"/><RowDefinition x:Name="NowTextRow" Height="0"/></Grid.RowDefinitions>
             <Border x:Name="ArtworkFrame" Width="58" Height="58" CornerRadius="9" Background="#292830"><Image x:Name="NowArtwork" Stretch="UniformToFill"/></Border>
-            <StackPanel x:Name="NowTextPanel" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,8,0"><TextBlock x:Name="NowTitle" Text="Nothing playing" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock x:Name="NowArtist" Text="Choose a song from the queue" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/></StackPanel>
+            <StackPanel x:Name="NowTextPanel" Grid.Column="1" VerticalAlignment="Center" Margin="12,0,8,0"><TextBlock x:Name="NowTitle" Text="Nothing playing" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock x:Name="NowArtist" Text="Choose a song from the queue" Foreground="{StaticResource TextMuted}" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,4,0,0" Cursor="Hand" ToolTip="Open artist" MouseLeftButtonUp="Artist_Click"/></StackPanel>
             <Popup x:Name="MiniQueuePopup" PlacementTarget="{Binding ElementName=NowPlayingSection}" Placement="Top" VerticalOffset="-7" AllowsTransparency="True" PopupAnimation="Fade" StaysOpen="True" Focusable="False">
               <Border x:Name="MiniQueueSurface" Width="380" MaxHeight="420" Margin="0,0,0,2" Padding="9,10,9,8" Background="#17171C" BorderBrush="#3B3944" BorderThickness="1" CornerRadius="12" MouseEnter="MiniQueueSurface_MouseEnter" MouseLeave="MiniQueueSurface_MouseLeave">
                 <Grid>
@@ -526,7 +529,7 @@
                         <Grid.ColumnDefinitions><ColumnDefinition Width="28"/><ColumnDefinition Width="38"/><ColumnDefinition Width="*"/><ColumnDefinition Width="38"/></Grid.ColumnDefinitions>
                         <TextBlock Text="{Binding Number}" Foreground="#777480" FontSize="9" VerticalAlignment="Center"/>
                         <Border Grid.Column="1" Width="30" Height="30" CornerRadius="5" Background="#292830" HorizontalAlignment="Left"><Image Source="{Binding ArtworkUrl, Converter={StaticResource ArtworkImage}, ConverterParameter=56}" Stretch="UniformToFill"/></Border>
-                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="6,0,8,0"><TextBlock Text="{Binding Title}" FontSize="10" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" Foreground="#96939E" FontSize="8" Margin="0,2,0,0" TextTrimming="CharacterEllipsis"/></StackPanel>
+                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="6,0,8,0"><TextBlock Text="{Binding Title}" FontSize="10" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Artist}" Foreground="#96939E" FontSize="8" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" Cursor="Hand" ToolTip="Open artist" MouseLeftButtonUp="Artist_Click"/></StackPanel>
                         <TextBlock Grid.Column="3" Text="{Binding DurationText}" Foreground="#777480" FontSize="8" VerticalAlignment="Center" HorizontalAlignment="Right"/>
                       </Grid>
                     </DataTemplate></ListBox.ItemTemplate>

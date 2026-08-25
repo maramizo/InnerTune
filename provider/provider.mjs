@@ -25,14 +25,18 @@ async function initialize() {
 }
 
 function thumbnail(item) {
-  const list = item.thumbnails || item.thumbnail?.contents || item.thumbnail || [];
+  const list = item?.thumbnails || item?.thumbnail?.contents || item?.thumbnail || [];
   const url = Array.isArray(list) ? list.at(-1)?.url : undefined;
   return url?.replace(/=w\d+-h\d+(?:-l\d+)?-rj$/, '=w226-h226-l90-rj');
 }
 
 function videoThumbnail(item) {
-  const list = item.thumbnails || item.thumbnail?.contents || item.thumbnail || [];
+  const list = item?.thumbnails || item?.thumbnail?.contents || item?.thumbnail || [];
   return Array.isArray(list) ? list.at(-1)?.url : undefined;
+}
+
+function artistId(person) {
+  return person?.channel_id || person?.id || person?.endpoint?.payload?.browseId;
 }
 
 async function search(query) {
@@ -42,6 +46,7 @@ async function search(query) {
     id: item.id,
     title: item.title,
     artist: item.artists?.map(artist => artist.name).join(', ') || item.author?.name || 'Unknown artist',
+    artistId: artistId(item.artists?.[0]) || artistId(item.author),
     album: item.album?.name,
     durationSeconds: item.duration?.seconds || 0,
     durationText: item.duration?.text || '--:--',
@@ -65,6 +70,7 @@ function trackFromItem(item, artworkFallback, artistFallback, albumFallback) {
     id,
     title,
     artist,
+    artistId: artistId(item.artists?.[0]) || artistId(item.author) || artistId(item.authors?.[0]),
     album: item.album?.name || albumFallback,
     durationSeconds,
     durationText: item.duration?.text || (durationSeconds ? formatDuration(durationSeconds) : '--:--'),
@@ -178,6 +184,59 @@ async function collection(argument = {}) {
     subtitle: text(playlist.header?.subtitle) || text(playlist.header?.description),
     artworkUrl,
     tracks: (playlist.items || []).map(item => trackFromItem(item, artworkUrl)).filter(Boolean)
+  };
+}
+
+function artistTrackItems(value, depth = 0, found = []) {
+  if (!value || depth > 5) return found;
+  if (Array.isArray(value)) {
+    for (const item of value) artistTrackItems(item, depth + 1, found);
+    return found;
+  }
+  if (typeof value !== 'object') return found;
+  const type = String(value.item_type || '').toLowerCase();
+  if ((type === 'song' || type === 'video' || value.duration?.seconds) && (value.id || value.endpoint?.payload?.videoId))
+    found.push(value);
+  for (const key of ['sections', 'contents', 'items', 'songs', 'results'])
+    if (value[key]) artistTrackItems(value[key], depth + 1, found);
+  return found;
+}
+
+function sameArtist(trackArtist, requested) {
+  const clean = value => String(value || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
+  const wanted = clean(requested);
+  const actual = clean(trackArtist);
+  return wanted && (actual === wanted || actual.startsWith(`${wanted} `) || actual.endsWith(` ${wanted}`));
+}
+
+async function artist(argument = {}) {
+  await initialize();
+  const id = String(argument?.id || '').trim();
+  const requestedName = String(argument?.name || '').trim();
+  if (!requestedName && !id) throw new Error('This artist has no name or id.');
+  const [page, searched] = await Promise.all([
+    id ? client.music.getArtist(id).catch(() => undefined) : Promise.resolve(undefined),
+    requestedName ? search(`${requestedName} songs`) : Promise.resolve([])
+  ]);
+  let pageSongs;
+  if (page && typeof page.getAllSongs === 'function') {
+    try { pageSongs = await page.getAllSongs(); } catch {}
+  }
+  const header = page?.header;
+  const name = text(header?.title) || requestedName || 'Artist';
+  const artworkUrl = thumbnail(header) || thumbnail(page?.background);
+  const catalogTracks = artistTrackItems(pageSongs || page)
+    .map(item => trackFromItem(item, artworkUrl, name))
+    .filter(Boolean);
+  const searchedTracks = searched.filter(track => sameArtist(track.artist, requestedName || name));
+  const tracks = uniqueItems([...catalogTracks, ...searchedTracks]);
+  return {
+    id: id || `artist:${name}`,
+    kind: 'artist',
+    title: name,
+    subtitle: `${tracks.length} ${tracks.length === 1 ? 'song' : 'songs'}`,
+    artworkUrl: artworkUrl || tracks[0]?.artworkUrl,
+    tracks
   };
 }
 
@@ -395,6 +454,7 @@ async function run(command, argument) {
   if (command === 'home') return home(argument);
   if (command === 'mood') return mood(argument);
   if (command === 'collection') return collection(argument);
+  if (command === 'artist') return artist(argument);
   if (command === 'resolve') return resolve(argument);
   if (command === 'video') return video(argument);
   if (command === 'video_candidates') return videoCandidates(argument);
@@ -417,7 +477,7 @@ if (process.argv[2] === 'serve') {
   }
 } else {
   try {
-    const argument = ['download', 'home', 'mood', 'collection', 'video_candidates'].includes(process.argv[2]) ? JSON.parse(process.argv[3]) : process.argv[3];
+    const argument = ['download', 'home', 'mood', 'collection', 'artist', 'video_candidates'].includes(process.argv[2]) ? JSON.parse(process.argv[3]) : process.argv[3];
     process.stdout.write(JSON.stringify(await run(process.argv[2], argument)));
   }
   catch (error) { process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`); process.exitCode = 1; }

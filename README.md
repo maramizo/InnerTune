@@ -12,13 +12,14 @@ Setup also adds InnerTune to your Windows startup folder so the tray control is 
 
 The installer bundles Node.js and FFmpeg. FFmpeg only performs a lossless container remux when a song is first cached; it does not re-encode the audio or remain running. Codex CLI is optional unless you use **Ask Luna**. The AI model defaults to `gpt-5.6-luna`.
 
-InnerTune discovers Codex from the official Windows or standalone installation, Windows App Paths, refreshed user and machine `PATH`, WinGet/WindowsApps, npm, or pnpm. Portable installations can set `INNERTUNE_CODEX_PATH` to their `codex.exe`.
+InnerTune discovers Codex from the official Windows or standalone installation, Windows App Paths, refreshed user and machine `PATH`, WinGet/WindowsApps, npm, or pnpm. After an automatic update, the installer and restarted app inherit that freshly rebuilt `PATH`. Portable installations can set `INNERTUNE_CODEX_PATH` to their `codex.exe`.
 
 ## Controls
 
 - The queue remains visible while you search, chat, or browse your library.
 - **Play** or a double-click starts a song as a standalone **Playing now** session. **Add** then grows it into an ad-hoc queue without interrupting playback.
 - **Next** places any song directly after the current one. It takes priority over shuffle, and the remaining shuffled songs still play once each.
+- Select an artist name anywhere in the app to open that artist’s InnerTube catalog and browse all available songs.
 - Double-click a queued song to play it.
 - Use **×** on a queue row to remove it.
 - Save queues with paths such as `Focus/Night`; the folders are created automatically.
@@ -29,6 +30,7 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 - Windows media keys and system media controls show the current title, artist, album, artwork, timeline, and transport controls.
 - **Settings** includes Midnight, Graphite, and OLED themes; DJ Cat, Minimal, and custom local icons; an audio-reactive animated DJ Cat toggle; and an opt-in playback resume setting. Automatic playback on startup is off by default.
 - The active saved queue is outlined and marked **Playing**. Editing the current queue removes that source marker.
+- **Shuffle all** above Saved queues combines every saved queue into one deduplicated, randomized listening session without changing the saved queues themselves.
 - Closing the window hides it to the notification area; use the tray menu to exit.
 
 Library state is stored locally at `%LOCALAPPDATA%\InnerTune\library.json`. Frequently changing playback position is kept separately in the small `%LOCALAPPDATA%\InnerTune\playback.json`, so routine progress saves do not rewrite the library.

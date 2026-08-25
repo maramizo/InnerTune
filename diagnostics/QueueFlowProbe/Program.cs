@@ -29,10 +29,18 @@ var detached = new List<Track> { Song("unrelated") };
 QueueFlow.Add(detached, current, added);
 Expect(detached, "current", "unrelated", "added");
 
+var allQueues = QueueFlow.ShuffleUnique(
+    new[] { current, added, next, added, Song("fourth") },
+    new Random(1729));
+if (allQueues.Count != 4 || allQueues.Select(track => track.Id).ToHashSet().Count != 4 ||
+    !allQueues.Select(track => track.Id).ToHashSet().SetEquals(["current", "added", "next", "fourth"]))
+    throw new InvalidOperationException("Shuffle all did not combine and deduplicate every saved queue song.");
+
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed = true,
     standaloneBecomesAdHoc = true,
     playNextMovesExistingSong = true,
-    detachedCurrentIsPreserved = true
+    detachedCurrentIsPreserved = true,
+    shuffleAllQueuesIsUnique = true
 }));

@@ -24,7 +24,10 @@ await writeFile(join(dataDirectory, 'library.json'), JSON.stringify({
   queue: [current],
   folders: [],
   favorites: [{track: added, folderId: null}, {track: next, folderId: null}],
-  savedQueues: [],
+  savedQueues: [
+    {id: 'one', name: 'One', folderId: null, tracks: [current, added]},
+    {id: 'two', name: 'Two', folderId: null, tracks: [added, next]}
+  ],
   recentlyPlayed: [],
   pendingCommands: [],
   settings: {}
@@ -53,7 +56,14 @@ try {
   expect(data.queueSourceName, 'Playing now', 'Standalone Play used the wrong source label');
   expect(data.pendingCommands.at(-1)?.type, 'play', 'Standalone Play did not reach the live player');
 
-  console.log(JSON.stringify({passed: true, adHocQueue: true, playNext: true, standalonePlay: true}));
+  await client.callTool({name: 'shuffle_all_saved_queues', arguments: {}});
+  data = await state();
+  if (data.queue.length !== 3 || new Set(data.queue.map(track => track.id)).size !== 3)
+    throw new Error('Shuffle all did not combine and deduplicate saved queues.');
+  expect(data.queueSourceName, 'All queues · shuffled', 'Shuffle all used the wrong source label');
+  expect(data.pendingCommands.at(-1)?.type, 'play', 'Shuffle all did not reach the live player');
+
+  console.log(JSON.stringify({passed: true, adHocQueue: true, playNext: true, standalonePlay: true, shuffleAllSavedQueues: true}));
 }
 finally {
   await client.close().catch(() => {});

@@ -49,6 +49,37 @@ var measuredPeak = 0f;
 meter.StreamVolume += (_, eventArgs) => measuredPeak = Math.Max(measuredPeak, eventArgs.MaxSampleValues.Max());
 meter.Read(new float[24_000], 0, 24_000);
 var audioMeterWorks = measuredPeak > .65f;
+var effectivePath = WindowsPathEnvironment.BuildEffectivePath(
+    @"C:\Machine;%SystemRoot%\System32",
+    @"C:\User;%PATH%",
+    @"C:\Transient;C:\Machine");
+var effectivePathParts = effectivePath.Split(Path.PathSeparator);
+var pathMergeWorks = effectivePathParts.Contains(@"C:\Machine", StringComparer.OrdinalIgnoreCase) &&
+    effectivePathParts.Contains(@"C:\User", StringComparer.OrdinalIgnoreCase) &&
+    effectivePathParts.Contains(@"C:\Transient", StringComparer.OrdinalIgnoreCase) &&
+    effectivePathParts.Count(path => path.Equals(@"C:\Machine", StringComparison.OrdinalIgnoreCase)) == 1 &&
+    !effectivePath.Contains("%PATH%", StringComparison.OrdinalIgnoreCase);
+var installerEnvironmentWorks = false;
+var installerProbeRoot = Path.Combine(Path.GetTempPath(), $"InnerTuneInstallerEnvironment-{Guid.NewGuid():N}");
+try
+{
+    Directory.CreateDirectory(installerProbeRoot);
+    var installerPath = Path.Combine(installerProbeRoot, "update.exe");
+    await File.WriteAllBytesAsync(installerPath, [0]);
+    var update = new AppUpdate(new Version(9, 9, 9), "v9.9.9", "https://example.invalid/update", "https://example.invalid/checksum", "https://example.invalid/release", "", installerPath);
+    var start = UpdateService.CreateInstallerStartInfo(update);
+    installerEnvironmentWorks = !start.UseShellExecute &&
+        start.WorkingDirectory == installerProbeRoot &&
+        start.Environment.TryGetValue("PATH", out var installerPathValue) &&
+        installerPathValue == WindowsPathEnvironment.BuildEffectivePath(
+            Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine),
+            Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User),
+            Environment.GetEnvironmentVariable("PATH"));
+}
+finally
+{
+    if (Directory.Exists(installerProbeRoot)) Directory.Delete(installerProbeRoot, true);
+}
 var playbackRoot = Path.Combine(Path.GetTempPath(), $"InnerTunePlaybackStore-{Guid.NewGuid():N}");
 var playbackStoreWorks = false;
 try
@@ -76,7 +107,7 @@ finally
 {
     if (Directory.Exists(playbackRoot)) Directory.Delete(playbackRoot, true);
 }
-var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && tempoTrackingWorks && audioMeterWorks && playbackStoreWorks;
+var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && tempoTrackingWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed,
@@ -90,6 +121,8 @@ Console.WriteLine(JsonSerializer.Serialize(new
     slowPhaseChanges = slowTempo.PhaseChanges,
     fastPhaseChanges = fastTempo.PhaseChanges,
     audioMeterWorks,
+    pathMergeWorks,
+    installerEnvironmentWorks,
     playbackStoreWorks,
     autoResumeDefault = new AppSettings().AutoResumeOnStart,
     optInResumesPlaying = optInResumesOnlyPlaying

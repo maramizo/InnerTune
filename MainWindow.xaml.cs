@@ -71,6 +71,8 @@ public partial class MainWindow : Window
     private string? _historyTrackId;
     private string? _continueArtworkUrl;
     private CollectionDetail? _collectionDetail;
+    private string _mode = "home";
+    private string _collectionReturnMode = "home";
     private CancellationTokenSource? _videoCancel;
     private CancellationTokenSource? _videoSearchCancel;
     private bool _videoActive;
@@ -321,6 +323,7 @@ public partial class MainWindow : Window
         FavoritesList.Visibility = _library.Favorites.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         SavedQueuesEmpty.Visibility = _library.SavedQueues.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         SavedQueueList.Visibility = _library.SavedQueues.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        ShuffleAllQueuesButton.IsEnabled = _library.SavedQueues.Any(queue => queue.Tracks.Count > 0);
         QueueCountText.Text = $"{_library.Queue.Count} {(_library.Queue.Count == 1 ? "song" : "songs")}";
         QueueHeadingText.Text = _library.QueueSourceName switch
         {
@@ -476,6 +479,7 @@ public partial class MainWindow : Window
 
     private void SetMode(string mode)
     {
+        _mode = mode;
         HomePanel.Visibility = mode == "home" ? Visibility.Visible : Visibility.Collapsed;
         SearchPanel.Visibility = mode == "search" ? Visibility.Visible : Visibility.Collapsed;
         AiPanel.Visibility = mode == "ai" ? Visibility.Visible : Visibility.Collapsed;
@@ -1639,6 +1643,7 @@ public partial class MainWindow : Window
 
     private async Task OpenCollectionAsync(DiscoveryItem item)
     {
+        _collectionReturnMode = "home";
         HomeScroll.Visibility = Visibility.Collapsed;
         CollectionPanel.Visibility = Visibility.Visible;
         CollectionLoading.Visibility = Visibility.Visible;
@@ -1686,6 +1691,71 @@ public partial class MainWindow : Window
         CollectionPanel.Visibility = Visibility.Collapsed;
         HomeScroll.Visibility = Visibility.Visible;
         _collectionDetail = null;
+        if (_collectionReturnMode != "home") SetMode(_collectionReturnMode);
+        _collectionReturnMode = "home";
+    }
+
+    private async void Artist_Click(object sender, MouseButtonEventArgs e)
+    {
+        var track = (sender as FrameworkElement)?.DataContext switch
+        {
+            Track direct => direct,
+            Favorite favorite => favorite.Track,
+            DiscoveryItem { Track: { } discovered } => discovered,
+            _ when ReferenceEquals(sender, NowArtist) || ReferenceEquals(sender, ContinueArtist) => _player.CurrentTrack,
+            _ => null
+        };
+        if (track is null || string.IsNullOrWhiteSpace(track.Artist) || track.Artist == "Unknown artist") return;
+        e.Handled = true;
+        await OpenArtistAsync(track);
+    }
+
+    private async Task OpenArtistAsync(Track track)
+    {
+        if (_mini) ToggleMini();
+        if (_mode != "home" || CollectionPanel.Visibility != Visibility.Visible)
+            _collectionReturnMode = _mode == "home" ? "home" : _mode;
+        SetMode("home");
+        HomeScroll.Visibility = Visibility.Collapsed;
+        CollectionPanel.Visibility = Visibility.Visible;
+        CollectionLoading.Visibility = Visibility.Visible;
+        CollectionEmpty.Visibility = Visibility.Collapsed;
+        CollectionTrackList.Visibility = Visibility.Collapsed;
+        PlayCollectionButton.IsEnabled = false;
+        AddCollectionButton.IsEnabled = false;
+        CollectionTitle.Text = track.Artist;
+        CollectionSubtitle.Text = "Artist";
+        CollectionCount.Text = "Loading…";
+        SetImage(CollectionArtwork, track.ArtworkUrl);
+        try
+        {
+            var detail = await _discoveryProvider.ArtistAsync(track.Artist, track.ArtistId);
+            _collectionDetail = detail;
+            for (var index = 0; index < detail.Tracks.Count; index++)
+            {
+                detail.Tracks[index].Number = (index + 1).ToString("00");
+                detail.Tracks[index].Refresh();
+            }
+            CollectionTitle.Text = detail.Title;
+            CollectionSubtitle.Text = "Artist";
+            CollectionCount.Text = detail.CountText;
+            SetImage(CollectionArtwork, detail.ArtworkUrl ?? track.ArtworkUrl);
+            CollectionTrackList.ItemsSource = detail.Tracks;
+            RefreshFavoriteStates();
+            CollectionTrackList.Visibility = detail.Tracks.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            CollectionEmpty.Visibility = detail.Tracks.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            CollectionEmptyText.Text = detail.Tracks.Count == 0 ? "No songs found for this artist" : "";
+            PlayCollectionButton.IsEnabled = detail.Tracks.Count > 0;
+            AddCollectionButton.IsEnabled = detail.Tracks.Count > 0;
+        }
+        catch (Exception error)
+        {
+            _collectionDetail = null;
+            CollectionEmptyText.Text = "Couldn’t open this artist";
+            CollectionEmpty.Visibility = Visibility.Visible;
+            SetStatus(error.Message, true);
+        }
+        finally { CollectionLoading.Visibility = Visibility.Collapsed; }
     }
 
     private async void PlayCollection_Click(object sender, RoutedEventArgs e)
@@ -1984,6 +2054,21 @@ public partial class MainWindow : Window
         _library.QueueSourceName = string.IsNullOrWhiteSpace(saved.DisplayPath) ? saved.Name : saved.DisplayPath;
         _playbackDirty = true;
         await SaveAsync(); SetStatus($"Loaded “{saved.Name}”");
+    }
+
+    private async void ShuffleAllQueues_Click(object sender, RoutedEventArgs e)
+    {
+        var tracks = QueueFlow.ShuffleUnique(_library.SavedQueues.SelectMany(queue => queue.Tracks));
+        if (tracks.Count == 0) { SetStatus("There are no songs in saved queues"); return; }
+        _player.ClearPlayNext();
+        _library.Queue.Clear();
+        foreach (var track in tracks) _library.Queue.Add(track);
+        _library.QueueSourceId = null;
+        _library.QueueSourceName = "All queues · shuffled";
+        _playbackDirty = true;
+        await SaveAsync();
+        await _player.PlayAsync(0);
+        SetStatus($"Shuffling {tracks.Count} songs from all saved queues");
     }
 
     private async void SavedTrack_Click(object sender, MouseButtonEventArgs e)

@@ -87,14 +87,23 @@ public sealed class UpdateService : IDisposable
 
     public static void LaunchInstaller(AppUpdate update)
     {
+        var start = CreateInstallerStartInfo(update);
+        _ = Process.Start(start) ?? throw new InvalidOperationException("Windows could not start the update installer.");
+    }
+
+    public static ProcessStartInfo CreateInstallerStartInfo(AppUpdate update)
+    {
         if (string.IsNullOrWhiteSpace(update.InstallerPath) || !File.Exists(update.InstallerPath))
             throw new InvalidOperationException("The update installer is not ready.");
-        _ = Process.Start(new ProcessStartInfo
+        var start = new ProcessStartInfo
         {
             FileName = update.InstallerPath,
             Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS",
-            UseShellExecute = true
-        }) ?? throw new InvalidOperationException("Windows could not start the update installer.");
+            UseShellExecute = false,
+            WorkingDirectory = Path.GetDirectoryName(update.InstallerPath)!
+        };
+        WindowsPathEnvironment.ApplyFreshPath(start);
+        return start;
     }
 
     private static bool HashMatches(string path, string expected)

@@ -31,6 +31,9 @@ public sealed class ProviderService : IDisposable
     public Task<CollectionDetail> CollectionAsync(string kind, string id, CancellationToken token = default) =>
         SendAsync<CollectionDetail>("collection", new { kind, id }, token);
 
+    public Task<CollectionDetail> ArtistAsync(string name, string? id = null, CancellationToken token = default) =>
+        SendAsync<CollectionDetail>("artist", new { name, id }, token);
+
     public async Task<string> ResolveAsync(string videoId, CancellationToken token = default) =>
         (await SendAsync<ResolveResult>("resolve", videoId, token)).Url;
 

@@ -35,7 +35,7 @@ $track = @{ id = 'current'; title = 'Current song'; artist = 'Test artist'; dura
     queueSourceId = $null; queueSourceName = 'Playing now'
     playback = @{ status = 'paused'; track = $track; trackId = 'current'; queueIndex = 0; queueId = $null; queueName = 'Playing now'; positionSeconds = 12 }
     queue = @($track); folders = @(); favorites = @(@{ track = $track; folderId = $null })
-    savedQueues = @(); recentlyPlayed = @(); videoMappings = @{}; pendingCommands = @()
+    savedQueues = @(@{ id = 'saved'; name = 'Saved test queue'; folderId = $null; tracks = @($track) }); recentlyPlayed = @(); videoMappings = @{}; pendingCommands = @()
     settings = @{ theme = 'midnight'; icon = 'dj-cat'; animatedIconEnabled = $false; autoResumeOnStart = $false }
 } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $testRoot 'library.json') -Encoding utf8
 
@@ -43,12 +43,16 @@ $previous = @{
     TestMode = $env:INNERTUNE_TEST_MODE
     Instance = $env:INNERTUNE_TEST_INSTANCE
     Data = $env:ITMUSIC_DATA_DIR
+    Capture = $env:INNERTUNE_TEST_CAPTURE_DIR
+    View = $env:INNERTUNE_TEST_CAPTURE_VIEW
 }
 $process = $null
 try {
     $env:INNERTUNE_TEST_MODE = '1'
     $env:INNERTUNE_TEST_INSTANCE = [Guid]::NewGuid().ToString('N')
     $env:ITMUSIC_DATA_DIR = $testRoot
+    $env:INNERTUNE_TEST_CAPTURE_DIR = Join-Path $testRoot 'capture'
+    $env:INNERTUNE_TEST_CAPTURE_VIEW = 'saved'
     $process = Start-Process $ApplicationPath -PassThru
     for ($attempt = 0; $attempt -lt 80; $attempt++) {
         $handle = [InnerTuneQueueTestWindow]::FindWindow($process.Id)
@@ -57,17 +61,27 @@ try {
     }
     if ($handle -eq [IntPtr]::Zero) { throw 'InnerTune did not expose its hidden queue test window.' }
     $root = [System.Windows.Automation.AutomationElement]::FromHandle($handle)
+    $capture = Join-Path $env:INNERTUNE_TEST_CAPTURE_DIR 'saved-queues.png'
+    for ($attempt = 0; $attempt -lt 40 -and !(Test-Path $capture); $attempt++) { Start-Sleep -Milliseconds 100 }
+    if (!(Test-Path $capture)) { throw 'The Saved queues test view did not render.' }
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($handle)
     $nextCondition = New-Object System.Windows.Automation.PropertyCondition(
         [System.Windows.Automation.AutomationElement]::NameProperty, 'Next')
     $nextActions = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $nextCondition))
+    $artistCondition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::NameProperty, 'Test artist')
+    $artistLabels = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $artistCondition))
     if ($root.Current.BoundingRectangle.Left -gt -30000) { throw 'The queue test window was not off-screen.' }
     if ($nextActions.Count -lt 2) { throw "Expected queue and library Play next actions; found $($nextActions.Count)." }
+    if ($artistLabels.Count -lt 1) { throw 'The artist link text was not exposed to the UI.' }
 
     [pscustomobject]@{
         Passed = $true
         Offscreen = $true
         Muted = $true
         PlayNextActions = $nextActions.Count
+        SavedQueueViewRendered = $true
+        ArtistLabels = $artistLabels.Count
         QueueSource = 'Playing now'
     } | ConvertTo-Json -Compress
 }
@@ -76,5 +90,7 @@ finally {
     $env:INNERTUNE_TEST_MODE = $previous.TestMode
     $env:INNERTUNE_TEST_INSTANCE = $previous.Instance
     $env:ITMUSIC_DATA_DIR = $previous.Data
+    $env:INNERTUNE_TEST_CAPTURE_DIR = $previous.Capture
+    $env:INNERTUNE_TEST_CAPTURE_VIEW = $previous.View
     if (Test-Path $testRoot) { Remove-Item $testRoot -Recurse -Force }
 }
