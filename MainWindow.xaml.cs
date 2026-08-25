@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private System.Drawing.Icon[]? _djTrayFrames;
     private int _activeDjFrame = -1;
     private readonly AudioIconAnimator _djIconAnimator = new();
+    private string? _djIconTrackId;
     private DateTime _lastIconFrameAt;
     private int _iconUpdateQueued;
     private float _pendingAudioLevel;
@@ -598,13 +599,24 @@ public partial class MainWindow : Window
         if (!PlaybackIsPlaying || !_library.Settings.AnimatedIconEnabled)
         {
             _djIconAnimator.Reset();
+            _djIconTrackId = _player.CurrentTrack?.Id;
             SetDjFrame(0);
             return;
         }
         var now = DateTime.UtcNow;
         if (now - _lastIconFrameAt < TimeSpan.FromMilliseconds(80)) return;
+        var trackId = _player.CurrentTrack?.Id;
+        if (!string.Equals(trackId, _djIconTrackId, StringComparison.Ordinal))
+        {
+            _djIconAnimator.Reset();
+            _djIconTrackId = trackId;
+            _lastIconFrameAt = default;
+        }
+        var elapsed = _lastIconFrameAt == default
+            ? .125
+            : Math.Clamp((now - _lastIconFrameAt).TotalSeconds, .025, .5);
         _lastIconFrameAt = now;
-        SetDjFrame(_djIconAnimator.Update(level, true, true));
+        SetDjFrame(_djIconAnimator.Update(level, true, true, elapsed));
     }
 
     private void QueueAnimatedIconUpdate(float level)
