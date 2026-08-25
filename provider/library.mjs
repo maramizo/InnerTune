@@ -4,7 +4,7 @@ import {homedir} from 'node:os';
 import {randomUUID} from 'node:crypto';
 
 const now = () => new Date().toISOString();
-const empty = () => ({version: 1, volume: 72, shuffleEnabled: false, repeatMode: 'off', queueSourceId: null, queueSourceName: 'Current queue', playback: {status: 'idle', track: null, trackId: null, queueIndex: -1, queueId: null, queueName: 'Current queue', positionSeconds: 0, updatedAt: now()}, queue: [], folders: [], favorites: [], savedQueues: [], recentlyPlayed: [], settings: {theme: 'midnight', icon: 'dj-cat', customIconPath: null, autoResumeOnStart: false}, pendingCommands: [], updatedAt: now()});
+const empty = () => ({version: 1, volume: 72, shuffleEnabled: false, repeatMode: 'off', queueSourceId: null, queueSourceName: 'Current queue', playback: {status: 'idle', track: null, trackId: null, queueIndex: -1, queueId: null, queueName: 'Current queue', positionSeconds: 0, updatedAt: now()}, queue: [], folders: [], favorites: [], savedQueues: [], recentlyPlayed: [], settings: {theme: 'midnight', icon: 'dj-cat', customIconPath: null, animatedIconEnabled: true, autoResumeOnStart: false}, pendingCommands: [], updatedAt: now()});
 export const libraryPath = () => join(process.env.ITMUSIC_DATA_DIR || join(homedir(), 'AppData', 'Local', 'InnerTune'), 'library.json');
 const split = path => path.split(/[\\/]+/).map(x => x.trim()).filter(Boolean);
 

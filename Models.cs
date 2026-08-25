@@ -239,6 +239,7 @@ public sealed class AppSettings
     public string Theme { get; set; } = "midnight";
     public string Icon { get; set; } = "dj-cat";
     public string? CustomIconPath { get; set; }
+    public bool AnimatedIconEnabled { get; set; } = true;
     public bool AutoResumeOnStart { get; set; }
 }
 

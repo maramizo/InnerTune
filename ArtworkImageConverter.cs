@@ -16,8 +16,8 @@ public sealed class ArtworkImageConverter : IValueConverter
             image.BeginInit();
             image.UriSource = uri;
             image.DecodePixelWidth = width;
-            image.CacheOption = BitmapCacheOption.OnDemand;
-            image.CreateOptions = BitmapCreateOptions.DelayCreation | BitmapCreateOptions.IgnoreColorProfile;
+            image.CacheOption = BitmapCacheOption.None;
+            image.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
             image.EndInit();
             return image;
         }

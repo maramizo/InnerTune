@@ -26,7 +26,7 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 - Use **Mini player** for the compact always-on-top widget.
 - Hover InnerTune on the Windows taskbar for Previous, Play/Pause, and Next; the taskbar icon also shows playback progress.
 - Windows media keys and system media controls show the current title, artist, album, artwork, timeline, and transport controls.
-- **Settings** includes Midnight, Graphite, and OLED themes; DJ Cat, Minimal, and custom local icons; and an opt-in playback resume setting. Automatic playback on startup is off by default.
+- **Settings** includes Midnight, Graphite, and OLED themes; DJ Cat, Minimal, and custom local icons; an audio-reactive animated DJ Cat toggle; and an opt-in playback resume setting. Automatic playback on startup is off by default.
 - The active saved queue is outlined and marked **Playing**. Editing the current queue removes that source marker.
 - Closing the window hides it to the notification area; use the tray menu to exit.
 

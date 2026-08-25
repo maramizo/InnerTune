@@ -37,6 +37,12 @@ public partial class MainWindow : Window
     private FileSystemWatcher? _watcher;
     private Forms.NotifyIcon? _tray;
     private System.Drawing.Icon? _trayAppearanceIcon;
+    private BitmapSource[]? _djIconFrames;
+    private System.Drawing.Icon[]? _djTrayFrames;
+    private int _activeDjFrame = -1;
+    private DateTime _lastIconFrameAt;
+    private int _iconUpdateQueued;
+    private float _pendingAudioLevel;
     private readonly Dictionary<ItemsControl, IEnumerable?> _suspendedItemSources = [];
     private bool _reallyClose;
     private bool _mini;
@@ -87,6 +93,7 @@ public partial class MainWindow : Window
         SourceInitialized += (_, _) => InitializeWindowsMedia();
         _player.StateChanged += (_, _) => Dispatcher.Invoke(() => { UpdatePlayerUi(); MarkPlaybackDirty(); });
         _player.Failed += (_, message) => Dispatcher.Invoke(() => SetStatus(message, true));
+        _player.AudioLevelChanged += QueueAnimatedIconUpdate;
         _agent.Activity += (_, activity) => Dispatcher.Invoke(() => AddAgentActivity(activity));
         ChatMessages.ItemsSource = _chat;
         VideoCandidateList.ItemsSource = _videoCandidates;
@@ -464,11 +471,14 @@ public partial class MainWindow : Window
             var source = ResolveAppIcon(icon);
             Icon = source;
             TitleLogo.Source = source;
+            _activeDjFrame = icon == "dj-cat" ? 0 : -1;
             CustomIconPreview.Source = File.Exists(_library.Settings.CustomIconPath) ? LoadBitmap(_library.Settings.CustomIconPath!, 128) : null;
             DjCatIconChoice.IsChecked = icon == "dj-cat";
             MinimalIconChoice.IsChecked = icon == "minimal";
             CustomIconChoice.IsChecked = icon == "custom";
             CustomIconHint.Text = File.Exists(_library.Settings.CustomIconPath) ? "Custom image saved locally" : "PNG, JPG, or ICO";
+            AnimatedIconToggle.IsChecked = _library.Settings.AnimatedIconEnabled;
+            AnimatedIconToggle.IsEnabled = icon == "dj-cat";
             AutoResumeToggle.IsChecked = _library.Settings.AutoResumeOnStart;
             UpdateTrayIcon();
             UpdatePlaybackModeButtons();
@@ -491,8 +501,32 @@ public partial class MainWindow : Window
     {
         "minimal" => CreateMinimalIcon(),
         "custom" when File.Exists(_library.Settings.CustomIconPath) => LoadBitmap(_library.Settings.CustomIconPath!, 256),
-        _ => LoadBitmap(new Uri("pack://application:,,,/Assets/InnerTune-DJCat.png"), 256)
+        _ => GetDjIconFrames()[0]
     };
+
+    private BitmapSource[] GetDjIconFrames()
+    {
+        if (_djIconFrames is not null) return _djIconFrames;
+        _djIconFrames =
+        [
+            NormalizeIconFrame(LoadBitmap(new Uri("pack://application:,,,/Assets/InnerTune-DJCat.png"), 256), 1),
+            NormalizeIconFrame(LoadBitmap(new Uri("pack://application:,,,/Assets/InnerTune-DJCat-Mid.png"), 256), .92),
+            NormalizeIconFrame(LoadBitmap(new Uri("pack://application:,,,/Assets/InnerTune-DJCat-High.png"), 256), .84)
+        ];
+        return _djIconFrames;
+    }
+
+    private static BitmapSource NormalizeIconFrame(ImageSource source, double scale)
+    {
+        const int size = 128;
+        var visual = new System.Windows.Media.DrawingVisual();
+        var inset = size * (1 - scale) / 2;
+        using (var drawing = visual.RenderOpen()) drawing.DrawImage(source, new Rect(inset, inset, size * scale, size * scale));
+        var bitmap = new RenderTargetBitmap(size, size, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        return bitmap;
+    }
 
     private static BitmapSource LoadBitmap(string path, int width) => LoadBitmap(new Uri(path, UriKind.Absolute), width);
 
@@ -535,29 +569,90 @@ public partial class MainWindow : Window
         if (_tray is null) return;
         try
         {
-            var source = ResolveAppIcon(_library.Settings.Icon);
-            var visual = new System.Windows.Media.DrawingVisual();
-            using (var drawing = visual.RenderOpen()) drawing.DrawImage(source, new Rect(0, 0, 64, 64));
-            var rendered = new RenderTargetBitmap(64, 64, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
-            rendered.Render(visual);
-            var encoder = new PngBitmapEncoder();
-            encoder.Frames.Add(BitmapFrame.Create(rendered));
-            using var stream = new MemoryStream();
-            encoder.Save(stream);
-            stream.Position = 0;
-            using var bitmap = new System.Drawing.Bitmap(stream);
-            var handle = bitmap.GetHicon();
-            try
+            if (_library.Settings.Icon == "dj-cat")
             {
-                var replacement = (System.Drawing.Icon)System.Drawing.Icon.FromHandle(handle).Clone();
-                var old = _trayAppearanceIcon;
-                _tray.Icon = replacement;
-                _trayAppearanceIcon = replacement;
-                old?.Dispose();
+                _djTrayFrames ??= GetDjIconFrames().Select(CreateNativeIcon).ToArray();
+                _tray.Icon = _djTrayFrames[0];
+                _activeDjFrame = 0;
+                _trayAppearanceIcon?.Dispose();
+                _trayAppearanceIcon = null;
+                return;
             }
-            finally { DestroyIcon(handle); }
+            var source = ResolveAppIcon(_library.Settings.Icon);
+            var replacement = CreateNativeIcon(source);
+            var old = _trayAppearanceIcon;
+            _tray.Icon = replacement;
+            _trayAppearanceIcon = replacement;
+            old?.Dispose();
         }
         catch { }
+    }
+
+    private static System.Drawing.Icon CreateNativeIcon(ImageSource source)
+    {
+        var visual = new System.Windows.Media.DrawingVisual();
+        using (var drawing = visual.RenderOpen()) drawing.DrawImage(source, new Rect(0, 0, 64, 64));
+        var rendered = new RenderTargetBitmap(64, 64, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        rendered.Render(visual);
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(rendered));
+        using var stream = new MemoryStream();
+        encoder.Save(stream);
+        stream.Position = 0;
+        using var bitmap = new System.Drawing.Bitmap(stream);
+        var handle = bitmap.GetHicon();
+        try { return (System.Drawing.Icon)System.Drawing.Icon.FromHandle(handle).Clone(); }
+        finally { DestroyIcon(handle); }
+    }
+
+    private void UpdateAnimatedIcon(float level)
+    {
+        if (!_settingsLoaded || _library.Settings.Icon != "dj-cat")
+        {
+            SetDjFrame(0);
+            return;
+        }
+        var frame = AudioIconFrameSelector.Select(level, PlaybackIsPlaying, _library.Settings.AnimatedIconEnabled);
+        if (!PlaybackIsPlaying || !_library.Settings.AnimatedIconEnabled)
+        {
+            SetDjFrame(0);
+            return;
+        }
+        var now = DateTime.UtcNow;
+        if (now - _lastIconFrameAt < TimeSpan.FromMilliseconds(120)) return;
+        _lastIconFrameAt = now;
+        SetDjFrame(frame);
+    }
+
+    private void QueueAnimatedIconUpdate(float level)
+    {
+        _pendingAudioLevel = level;
+        if (Interlocked.Exchange(ref _iconUpdateQueued, 1) != 0) return;
+        Dispatcher.BeginInvoke(() =>
+        {
+            Interlocked.Exchange(ref _iconUpdateQueued, 0);
+            UpdateAnimatedIcon(_pendingAudioLevel);
+        }, DispatcherPriority.Background);
+    }
+
+    private void SetDjFrame(int frame)
+    {
+        if (_library.Settings.Icon != "dj-cat" || _activeDjFrame == frame) return;
+        var frames = GetDjIconFrames();
+        frame = Math.Clamp(frame, 0, frames.Length - 1);
+        TitleLogo.Source = frames[frame];
+        _djTrayFrames ??= frames.Select(CreateNativeIcon).ToArray();
+        if (_tray is not null)
+        {
+            _tray.Icon = _djTrayFrames[frame];
+        }
+        var windowHandle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        if (windowHandle != IntPtr.Zero)
+        {
+            SendMessage(windowHandle, 0x0080, IntPtr.Zero, _djTrayFrames[frame].Handle);
+            SendMessage(windowHandle, 0x0080, new IntPtr(1), _djTrayFrames[frame].Handle);
+        }
+        _activeDjFrame = frame;
     }
 
     private async void ThemeChoice_Click(object sender, RoutedEventArgs e)
@@ -610,6 +705,14 @@ public partial class MainWindow : Window
     {
         if (_applyingSettings || !_settingsLoaded) return;
         _library.Settings.AutoResumeOnStart = AutoResumeToggle.IsChecked == true;
+        await SaveAsync();
+    }
+
+    private async void AnimatedIconToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_applyingSettings || !_settingsLoaded) return;
+        _library.Settings.AnimatedIconEnabled = AnimatedIconToggle.IsChecked == true;
+        if (!_library.Settings.AnimatedIconEnabled) SetDjFrame(0);
         await SaveAsync();
     }
 
@@ -1579,8 +1682,8 @@ public partial class MainWindow : Window
         image.BeginInit();
         image.UriSource = new Uri(url, UriKind.Absolute);
         image.DecodePixelWidth = width;
-        image.CacheOption = BitmapCacheOption.OnDemand;
-        image.CreateOptions = BitmapCreateOptions.DelayCreation | BitmapCreateOptions.IgnoreColorProfile;
+        image.CacheOption = BitmapCacheOption.None;
+        image.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
         image.EndInit();
         return image;
     }
@@ -2148,6 +2251,10 @@ public partial class MainWindow : Window
             Height = 800;
             UpdateLayout();
             await Dispatcher.Yield(DispatcherPriority.Render);
+            await Task.Delay(1800);
+            if (int.TryParse(Environment.GetEnvironmentVariable(AppRuntime.TestIconFrameVariable), out var iconFrame)) SetDjFrame(iconFrame);
+            UpdateLayout();
+            await Dispatcher.Yield(DispatcherPriority.Render);
             Directory.CreateDirectory(outputDirectory);
             var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
             var bitmap = new RenderTargetBitmap(
@@ -2204,6 +2311,9 @@ public partial class MainWindow : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyIcon(IntPtr handle);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
     private async void ExitApp()
     {
         if (_reallyClose) return;
@@ -2230,6 +2340,8 @@ public partial class MainWindow : Window
         _tray = null;
         _trayAppearanceIcon?.Dispose();
         _trayAppearanceIcon = null;
+        if (_djTrayFrames is not null) foreach (var frame in _djTrayFrames) frame.Dispose();
+        _djTrayFrames = null;
         _lyrics.Dispose();
         _videoCancel?.Cancel();
         try { VideoPlayer.Stop(); VideoPlayer.Source = null; } catch { }

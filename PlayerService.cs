@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Windows.Threading;
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 
 namespace InnerTune;
 
@@ -19,6 +20,7 @@ public sealed class PlayerService : IDisposable
     private string[] _queueIds = [];
     private WaveOutEvent? _output;
     private MediaFoundationReader? _reader;
+    private MeteringSampleProvider? _meter;
     private Track? _currentTrack;
     private int _index = -1;
     private bool _playing;
@@ -30,6 +32,7 @@ public sealed class PlayerService : IDisposable
 
     public event EventHandler? StateChanged;
     public event EventHandler<string>? Failed;
+    public event Action<float>? AudioLevelChanged;
     public Track? CurrentTrack => _currentTrack;
     public int CurrentIndex => _index;
     public bool IsPlaying => _playing;
@@ -126,9 +129,11 @@ public sealed class PlayerService : IDisposable
                 source = await PrepareAudioAsync(track.Id, _loadCancel.Token);
             _reader = new MediaFoundationReader(source);
             _reader.CurrentTime = ClampPosition(_pendingPosition, (int)Math.Ceiling(_reader.TotalTime.TotalSeconds));
+            _meter = new MeteringSampleProvider(_reader.ToSampleProvider(), Math.Max(1, _reader.WaveFormat.SampleRate / 8));
+            _meter.StreamVolume += Meter_StreamVolume;
             _output = new WaveOutEvent { DesiredLatency = 150, NumberOfBuffers = 3, Volume = _volume };
             _output.PlaybackStopped += Output_PlaybackStopped;
-            _output.Init(_reader);
+            _output.Init(_meter);
             _output.Play();
             _playing = true;
             StateChanged?.Invoke(this, EventArgs.Empty);
@@ -155,7 +160,7 @@ public sealed class PlayerService : IDisposable
             return;
         }
         if (_output is null) { _ = StartTrackAsync(_currentTrack, _index, _pendingPosition); return; }
-        if (_playing) { _output.Pause(); _playing = false; }
+        if (_playing) { _output.Pause(); _playing = false; AudioLevelChanged?.Invoke(0); }
         else { _output.Play(); _playing = true; }
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -169,7 +174,14 @@ public sealed class PlayerService : IDisposable
         }
         if (_output is not null && _playing) _output.Pause();
         _playing = false;
+        AudioLevelChanged?.Invoke(0);
         StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void Meter_StreamVolume(object? sender, StreamVolumeEventArgs e)
+    {
+        var peak = e.MaxSampleValues.Length == 0 ? 0 : e.MaxSampleValues.Max(value => Math.Abs(value));
+        AudioLevelChanged?.Invoke(Math.Clamp(peak * _volume, 0, 1));
     }
 
     public async Task NextAsync(bool automatic = false)
@@ -224,6 +236,7 @@ public sealed class PlayerService : IDisposable
     private void Output_PlaybackStopped(object? sender, StoppedEventArgs e)
     {
         _playing = false;
+        AudioLevelChanged?.Invoke(0);
         StateChanged?.Invoke(this, EventArgs.Empty);
         if (e.Exception is not null) { Failed?.Invoke(this, FriendlyPlaybackError(e.Exception)); return; }
         if (_reader is not null && _reader.TotalTime > TimeSpan.Zero && _reader.CurrentTime >= _reader.TotalTime - TimeSpan.FromMilliseconds(500))
@@ -320,6 +333,11 @@ public sealed class PlayerService : IDisposable
 
     private void DisposePlayback()
     {
+        if (_meter is not null)
+        {
+            _meter.StreamVolume -= Meter_StreamVolume;
+            _meter = null;
+        }
         if (_output is not null)
         {
             _output.PlaybackStopped -= Output_PlaybackStopped;
