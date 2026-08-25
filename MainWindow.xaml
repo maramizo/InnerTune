@@ -4,7 +4,7 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="InnerTune" Width="1280" Height="800" MinWidth="1040" MinHeight="620"
         WindowStyle="None" ResizeMode="CanResizeWithGrip" Background="#0B0B0E"
-        Icon="Assets/InnerTune-DJCat.png"
+        Icon="Assets/InnerTune-DJCat-Procedural.png"
         Foreground="{StaticResource TextPrimary}" FontFamily="Segoe UI Variable Text,Segoe UI"
         Closing="Window_Closing" PreviewTextInput="Window_PreviewTextInput">
   <shell:WindowChrome.WindowChrome>
@@ -20,7 +20,7 @@
 
       <Grid x:Name="TitleBar" Grid.Row="0" Background="#0D0D10" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown">
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0">
-          <Border Width="34" Height="34" CornerRadius="10" Background="#201A2C" Padding="2"><Image x:Name="TitleLogo" Source="Assets/InnerTune-DJCat.png" Stretch="Uniform"/></Border>
+          <Border Width="34" Height="34" CornerRadius="10" Background="#201A2C" Padding="2"><Image x:Name="TitleLogo" Source="Assets/InnerTune-DJCat-Procedural.png" Stretch="Uniform"/></Border>
           <TextBlock Text="InnerTune" FontSize="16" FontWeight="Bold" Margin="10,0,0,0" VerticalAlignment="Center"/>
         </StackPanel>
         <Border x:Name="StatusPill" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#25242C" CornerRadius="15" Padding="13,6">
@@ -343,13 +343,13 @@
                   <TextBlock Text="APP ICON" Foreground="#777480" FontSize="9" FontWeight="Bold"/>
                   <TextBlock Text="Pick an identity" FontSize="17" FontWeight="SemiBold" Margin="0,5,0,12"/>
                   <UniformGrid Columns="3" Margin="0,0,0,9">
-                    <RadioButton x:Name="DjCatIconChoice" GroupName="Icon" Tag="dj-cat" Style="{StaticResource ChoiceCard}" Margin="0,0,8,0" Click="IconChoice_Click"><StackPanel><Image Source="Assets/InnerTune-DJCat.png" Width="46" Height="46" Stretch="Uniform" HorizontalAlignment="Left"/><TextBlock Text="DJ Cat" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel></RadioButton>
+                    <RadioButton x:Name="DjCatIconChoice" GroupName="Icon" Tag="dj-cat" Style="{StaticResource ChoiceCard}" Margin="0,0,8,0" Click="IconChoice_Click"><StackPanel><Image Source="Assets/InnerTune-DJCat-Procedural.png" Width="46" Height="46" Stretch="Uniform" HorizontalAlignment="Left"/><TextBlock Text="DJ Cat" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel></RadioButton>
                     <RadioButton x:Name="MinimalIconChoice" GroupName="Icon" Tag="minimal" Style="{StaticResource ChoiceCard}" Margin="4,0" Click="IconChoice_Click"><StackPanel><Border Width="46" Height="46" CornerRadius="12" Background="#9D7BFF" HorizontalAlignment="Left"><Path Width="22" Height="25" Stretch="Uniform" Stroke="#17121F" StrokeThickness="1.8" StrokeStartLineCap="Round" Data="M12,3 V16 M12,6 L20,4 V14 M12,16 A4,3 0 1 1 8,13 A4,3 0 0 1 12,16 M20,14 A4,3 0 1 1 16,11 A4,3 0 0 1 20,14"/></Border><TextBlock Text="Minimal" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel></RadioButton>
                     <RadioButton x:Name="CustomIconChoice" GroupName="Icon" Tag="custom" Style="{StaticResource ChoiceCard}" Margin="8,0,0,0" Click="IconChoice_Click"><StackPanel><Border Width="46" Height="46" CornerRadius="12" Background="#24232B" BorderBrush="#514C5F" BorderThickness="1" HorizontalAlignment="Left"><Image x:Name="CustomIconPreview" Stretch="UniformToFill"/></Border><TextBlock Text="Custom" FontWeight="SemiBold" Margin="0,8,0,0"/></StackPanel></RadioButton>
                   </UniformGrid>
                   <StackPanel Orientation="Horizontal" Margin="0,0,0,10"><Button Content="Choose image…" Padding="14,6" Click="ChooseCustomIcon_Click"/><TextBlock x:Name="CustomIconHint" Text="PNG, JPG, or ICO" Foreground="{StaticResource TextMuted}" FontSize="9" VerticalAlignment="Center" Margin="10,0,0,0"/></StackPanel>
                   <Border Background="#19191E" BorderBrush="#34323D" BorderThickness="1" CornerRadius="12" Padding="15" Margin="0,0,0,30">
-                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Animated DJ Cat" FontWeight="SemiBold"/><TextBlock Text="The cat’s hands react to the current song’s volume. Uses three prepared frames at a low update rate." Foreground="{StaticResource TextMuted}" FontSize="9" Margin="0,5,16,0" TextWrapping="Wrap"/></StackPanel><CheckBox x:Name="AnimatedIconToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center" Checked="AnimatedIconToggle_Changed" Unchecked="AnimatedIconToggle_Changed"/></Grid>
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><StackPanel><TextBlock Text="Animated DJ Cat" FontWeight="SemiBold"/><TextBlock Text="Procedural hands, head movement, and a translucent equalizer react continuously to the music." Foreground="{StaticResource TextMuted}" FontSize="9" Margin="0,5,16,0" TextWrapping="Wrap"/></StackPanel><CheckBox x:Name="AnimatedIconToggle" Grid.Column="1" Style="{StaticResource ToggleSwitch}" VerticalAlignment="Center" Checked="AnimatedIconToggle_Changed" Unchecked="AnimatedIconToggle_Changed"/></Grid>
                   </Border>
 
                   <TextBlock Text="PLAYBACK" Foreground="#777480" FontSize="9" FontWeight="Bold"/>

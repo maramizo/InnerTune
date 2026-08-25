@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory = $true)] [string]$ApplicationPath,
-    [Parameter(Mandatory = $true)] [string]$LibraryPath
+    [Parameter(Mandatory = $true)] [string]$LibraryPath,
+    [ValidateRange(3, 10)] [int]$CycleCount = 5
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,12 +63,12 @@ try {
         $button.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
     }
     $miniSamples = @()
-    for ($cycle = 1; $cycle -le 3; $cycle++) {
+    for ($cycle = 1; $cycle -le $CycleCount; $cycle++) {
         Invoke-MiniToggle
         Start-Sleep -Seconds 3
         $process.Refresh()
         $miniSamples += [pscustomobject]@{ Cycle = $cycle; WorkingSetMB = [math]::Round($process.WorkingSet64 / 1MB, 1); PrivateMB = [math]::Round($process.PrivateMemorySize64 / 1MB, 1); Handles = $process.HandleCount }
-        if ($cycle -lt 3) { Invoke-MiniToggle; Start-Sleep -Seconds 2 }
+        if ($cycle -lt $CycleCount) { Invoke-MiniToggle; Start-Sleep -Seconds 2 }
     }
     $after = $miniSamples[-1]
     [pscustomobject]@{ BeforeMini = $before; MiniCycles = $miniSamples; WorkingSetReleasedMB = [math]::Round($before.WorkingSetMB - $after.WorkingSetMB, 1); PrivateGrowthAcrossCyclesMB = [math]::Round($after.PrivateMB - $miniSamples[0].PrivateMB, 1); HandleGrowthAcrossCycles = $after.Handles - $miniSamples[0].Handles } | ConvertTo-Json -Depth 5

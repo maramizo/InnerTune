@@ -3,7 +3,7 @@ param(
     [string]$OutputDirectory = "$env:TEMP\InnerTuneSettingsCapture",
     [ValidateSet('settings', 'saved')] [string]$View = 'settings',
     [string]$LibraryPath,
-    [ValidateRange(0, 2)] [int]$IconFrame = 0
+    [ValidateRange(0, 40)] [int]$IconFrame = 0
 )
 
 $ErrorActionPreference = 'Stop'

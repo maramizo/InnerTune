@@ -45,8 +45,6 @@ public sealed class WindowsMediaIntegration : IDisposable
     private bool _disposed;
     private readonly ImageSource _playIcon = CreateTaskbarImage(TaskbarIcon.Play);
     private readonly ImageSource _pauseIcon = CreateTaskbarImage(TaskbarIcon.Pause);
-    private readonly ImageSource[] _audioOverlayFrames = CreateAudioOverlayFrames();
-    private int _lastAudioOverlayFrame = -2;
 
     public WindowsMediaIntegration(Window window, Action toggle, Action previous, Action next, Action<double> seek)
     {
@@ -76,15 +74,6 @@ public sealed class WindowsMediaIntegration : IDisposable
         UpdateThumbnailButton(state);
         UpdateTaskbarProgress(state);
         UpdateSystemMediaControls(state);
-    }
-
-    public void SetAudioIconFrame(int frame, bool enabled)
-    {
-        if (_disposed) return;
-        var requested = enabled ? Math.Clamp(frame, 0, _audioOverlayFrames.Length - 1) : -1;
-        if (_lastAudioOverlayFrame == requested) return;
-        _taskbar.Overlay = requested >= 0 ? _audioOverlayFrames[requested] : null;
-        _lastAudioOverlayFrame = requested;
     }
 
     private void UpdateThumbnailButton(WindowsMediaState state)
@@ -252,32 +241,6 @@ public sealed class WindowsMediaIntegration : IDisposable
         return image;
     }
 
-    private static ImageSource[] CreateAudioOverlayFrames() =>
-    [
-        CreateAudioOverlay([4d, 8d, 5d]),
-        CreateAudioOverlay([8d, 5d, 11d]),
-        CreateAudioOverlay([12d, 9d, 14d])
-    ];
-
-    private static ImageSource CreateAudioOverlay(double[] heights)
-    {
-        var drawing = new DrawingGroup();
-        using (var context = drawing.Open())
-        {
-            context.DrawEllipse(new SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 92, 170)), null, new System.Windows.Point(8, 8), 8, 8);
-            var bar = new SolidColorBrush(System.Windows.Media.Color.FromRgb(25, 18, 31));
-            for (var index = 0; index < heights.Length; index++)
-            {
-                var height = heights[index];
-                context.DrawRoundedRectangle(bar, null, new Rect(3 + index * 4, 14 - height, 2.5, height), 1.25, 1.25);
-            }
-        }
-        drawing.Freeze();
-        var image = new DrawingImage(drawing);
-        image.Freeze();
-        return image;
-    }
-
     public void Dispose()
     {
         if (_disposed) return;
@@ -290,7 +253,6 @@ public sealed class WindowsMediaIntegration : IDisposable
             _transport = null;
         }
         _taskbar.ProgressState = TaskbarItemProgressState.None;
-        _taskbar.Overlay = null;
         _taskbar.ThumbButtonInfos.Clear();
     }
 

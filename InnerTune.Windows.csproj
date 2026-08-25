@@ -11,7 +11,7 @@
     <AssemblyName>InnerTune</AssemblyName>
     <RootNamespace>InnerTune</RootNamespace>
     <ApplicationIcon>Assets\InnerTune.ico</ApplicationIcon>
-    <Version>1.1.10</Version>
+    <Version>1.1.11</Version>
     <Authors>InnerTune</Authors>
     <Product>InnerTune</Product>
     <Description>A lightweight Windows music player powered by InnerTube.</Description>
@@ -24,9 +24,7 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
   </ItemGroup>
   <ItemGroup>
-    <Resource Include="Assets\InnerTune-DJCat.png" />
-    <Resource Include="Assets\InnerTune-DJCat-Mid.png" />
-    <Resource Include="Assets\InnerTune-DJCat-High.png" />
+    <Resource Include="Assets\InnerTune-DJCat-Procedural.png" />
   </ItemGroup>
   <ItemGroup>
     <Compile Remove="diagnostics\**\*.cs" />

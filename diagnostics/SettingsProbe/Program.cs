@@ -12,15 +12,13 @@ var optInResumesOnlyPlaying = PlaybackRestorePolicy.ShouldAutoResume(playing, se
     !PlaybackRestorePolicy.ShouldAutoResume(paused, settings);
 var roundTrip = JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(settings));
 var serializationWorks = roundTrip is { AutoResumeOnStart: true, Theme: "midnight", Icon: "dj-cat" };
-var iconLevelsWork = AudioIconFrameSelector.Select(0, true, true) == 0 &&
-    AudioIconFrameSelector.Select(.3f, true, true) == 1 &&
-    AudioIconFrameSelector.Select(.8f, true, true) == 2 &&
-    AudioIconFrameSelector.Select(.8f, false, true) == 0 &&
-    AudioIconFrameSelector.Select(.8f, true, false) == 0 &&
-    AudioIconFrameSelector.SelectAnimated(.3f, true, true, 0) == 0 &&
-    AudioIconFrameSelector.SelectAnimated(.3f, true, true, 1) == 1 &&
-    AudioIconFrameSelector.SelectAnimated(.8f, true, true, 0) == 1 &&
-    AudioIconFrameSelector.SelectAnimated(.8f, true, true, 1) == 2;
+var iconAnimator = new AudioIconAnimator();
+var animatedFrames = Enumerable.Range(0, 16).Select(_ => iconAnimator.Update(.8f, true, true)).ToArray();
+var iconLevelsWork = iconAnimator.Update(0, false, true) == 0 &&
+    animatedFrames.Distinct().Count() >= AudioIconAnimator.PhaseCount &&
+    animatedFrames.Min() >= AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, 0) &&
+    animatedFrames.Max() <= AudioIconAnimator.FrameCount - 1 &&
+    AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, AudioIconAnimator.PhaseCount - 1) == AudioIconAnimator.FrameCount - 1;
 var signal = new SignalGenerator(48_000, 2) { Frequency = 440, Gain = .7, Type = SignalGeneratorType.Sin };
 var meter = new MeteringSampleProvider(signal, 6_000);
 var measuredPeak = 0f;
