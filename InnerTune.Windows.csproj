@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <DisableImplicitNamespaceImports>true</DisableImplicitNamespaceImports>
+    <AssemblyName>InnerTune</AssemblyName>
+    <RootNamespace>InnerTune</RootNamespace>
+    <ApplicationIcon>Assets\InnerTune.ico</ApplicationIcon>
+    <Version>1.1.0</Version>
+    <Authors>InnerTune</Authors>
+    <Product>InnerTune</Product>
+    <Description>A lightweight Windows music player powered by InnerTube.</Description>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <DebugType>embedded</DebugType>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <Resource Include="Assets\InnerTune-DJCat.png" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Remove="diagnostics\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="provider\**\*" Exclude="provider\node_modules\**">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+</Project>

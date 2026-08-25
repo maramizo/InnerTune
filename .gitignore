@@ -1,0 +1,10 @@
+bin/
+obj/
+publish/
+artifacts/
+provider/node_modules/
+.vs/
+*.user
+*.suo
+*.log
+*.download

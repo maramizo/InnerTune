@@ -1,0 +1,319 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.IO;
+using System.Windows.Threading;
+using NAudio.Wave;
+
+namespace InnerTune;
+
+public enum PlaybackRepeatMode { Off, All, One }
+
+public sealed class PlayerService : IDisposable
+{
+    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(500) };
+    private readonly ProviderService _provider;
+    private readonly string _audioCache = Path.Combine(AppRuntime.DataDirectory, "audio-cache");
+    private readonly Dictionary<string, string> _preparedFiles = new();
+    private readonly ConcurrentDictionary<string, Task<string>> _preparations = new();
+    private IReadOnlyList<Track> _queue = [];
+    private string[] _queueIds = [];
+    private WaveOutEvent? _output;
+    private MediaFoundationReader? _reader;
+    private Track? _currentTrack;
+    private int _index = -1;
+    private bool _playing;
+    private float _volume = .72f;
+    private TimeSpan _pendingPosition;
+    private CancellationTokenSource? _loadCancel;
+    private readonly Stack<int> _shuffleHistory = [];
+    private bool _shuffleEnabled;
+
+    public event EventHandler? StateChanged;
+    public event EventHandler<string>? Failed;
+    public Track? CurrentTrack => _currentTrack;
+    public int CurrentIndex => _index;
+    public bool IsPlaying => _playing;
+    public bool IsLoading { get; private set; }
+    public bool ShuffleEnabled
+    {
+        get => _shuffleEnabled;
+        set { if (_shuffleEnabled == value) return; _shuffleEnabled = value; _shuffleHistory.Clear(); StateChanged?.Invoke(this, EventArgs.Empty); }
+    }
+    public PlaybackRepeatMode RepeatMode { get; set; }
+    public TimeSpan Position => _reader?.CurrentTime ?? _pendingPosition;
+    public TimeSpan Duration => _reader?.TotalTime ?? TimeSpan.FromSeconds(Math.Max(0, _currentTrack?.DurationSeconds ?? 0));
+    public double Volume
+    {
+        get => _volume * 100;
+        set
+        {
+            _volume = (float)(Math.Clamp(value, 0, 100) / 100);
+            if (_output is not null) _output.Volume = _volume;
+            StateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public PlayerService(ProviderService provider)
+    {
+        _provider = provider;
+        _timer.Tick += (_, _) => StateChanged?.Invoke(this, EventArgs.Empty);
+        _timer.Start();
+    }
+
+    public void SetQueue(IReadOnlyList<Track> queue)
+    {
+        var queueIds = queue.Select(track => track.Id).ToArray();
+        if (!_queueIds.SequenceEqual(queueIds)) _shuffleHistory.Clear();
+        _queueIds = queueIds;
+        _queue = queue;
+        if (_currentTrack is not null)
+        {
+            var newIndex = queue.ToList().FindIndex(track => track.Id == _currentTrack.Id);
+            _index = newIndex;
+        }
+    }
+
+    public Task PlayAsync(int index)
+    {
+        if (index < 0 || index >= _queue.Count) return Task.CompletedTask;
+        _shuffleHistory.Clear();
+        return StartTrackAsync(_queue[index], index, TimeSpan.Zero);
+    }
+
+    public void RestorePaused(Track track, int index, TimeSpan position)
+    {
+        _loadCancel?.Cancel();
+        DisposePlayback();
+        _index = index;
+        _currentTrack = track;
+        _pendingPosition = ClampPosition(position, track.DurationSeconds);
+        _playing = false;
+        IsLoading = false;
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public Task RestorePlayingAsync(Track track, int index, TimeSpan position) => StartTrackAsync(track, index, position);
+
+    private async Task StartTrackAsync(Track track, int index, TimeSpan startPosition)
+    {
+        _loadCancel?.Cancel();
+        DisposePlayback();
+        _loadCancel = new CancellationTokenSource();
+        var load = _loadCancel;
+        _index = index;
+        _currentTrack = track;
+        _pendingPosition = ClampPosition(startPosition, track.DurationSeconds);
+        _playing = false;
+        IsLoading = true;
+        StateChanged?.Invoke(this, EventArgs.Empty);
+        try
+        {
+            if (!_preparedFiles.Remove(track.Id, out var source))
+                source = await PrepareAudioAsync(track.Id, _loadCancel.Token);
+            _reader = new MediaFoundationReader(source);
+            _reader.CurrentTime = ClampPosition(_pendingPosition, (int)Math.Ceiling(_reader.TotalTime.TotalSeconds));
+            _output = new WaveOutEvent { DesiredLatency = 150, NumberOfBuffers = 3, Volume = _volume };
+            _output.PlaybackStopped += Output_PlaybackStopped;
+            _output.Init(_reader);
+            _output.Play();
+            _playing = true;
+            StateChanged?.Invoke(this, EventArgs.Empty);
+            _ = PrefetchNextAsync();
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception e) { Failed?.Invoke(this, FriendlyPlaybackError(e)); }
+        finally
+        {
+            if (ReferenceEquals(_loadCancel, load))
+            {
+                IsLoading = false;
+                StateChanged?.Invoke(this, EventArgs.Empty);
+            }
+        }
+    }
+
+    public void Toggle()
+    {
+        if (IsLoading) return;
+        if (_currentTrack is null)
+        {
+            if (_queue.Count > 0) _ = PlayAsync(0);
+            return;
+        }
+        if (_output is null) { _ = StartTrackAsync(_currentTrack, _index, _pendingPosition); return; }
+        if (_playing) { _output.Pause(); _playing = false; }
+        else { _output.Play(); _playing = true; }
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void Pause()
+    {
+        if (IsLoading)
+        {
+            _loadCancel?.Cancel();
+            IsLoading = false;
+        }
+        if (_output is not null && _playing) _output.Pause();
+        _playing = false;
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public async Task NextAsync(bool automatic = false)
+    {
+        if (_queue.Count == 0) return;
+        var current = _currentTrack is null ? -1 : _queue.ToList().FindIndex(track => track.Id == _currentTrack.Id);
+        if (automatic && RepeatMode == PlaybackRepeatMode.One && current >= 0)
+        {
+            await StartTrackAsync(_queue[current], current, TimeSpan.Zero);
+            return;
+        }
+        if (automatic && RepeatMode == PlaybackRepeatMode.Off && current == _queue.Count - 1) return;
+        int next;
+        if (ShuffleEnabled && _queue.Count > 1)
+        {
+            do next = Random.Shared.Next(_queue.Count); while (next == current);
+            if (current >= 0) _shuffleHistory.Push(current);
+        }
+        else next = (current + 1 + _queue.Count) % _queue.Count;
+        await StartTrackAsync(_queue[next], next, TimeSpan.Zero);
+    }
+
+    public async Task PreviousAsync()
+    {
+        if (Position.TotalSeconds > 4) { Seek(0); return; }
+        if (_queue.Count == 0) return;
+        var current = _currentTrack is null ? -1 : _queue.ToList().FindIndex(track => track.Id == _currentTrack.Id);
+        var previous = ShuffleEnabled && _shuffleHistory.TryPop(out var shuffled)
+            ? shuffled
+            : current < 0 ? _queue.Count - 1 : (current - 1 + _queue.Count) % _queue.Count;
+        await StartTrackAsync(_queue[previous], previous, TimeSpan.Zero);
+    }
+
+    public void Seek(double seconds)
+    {
+        _pendingPosition = TimeSpan.FromSeconds(Math.Clamp(seconds, 0, Math.Max(0, Duration.TotalSeconds)));
+        if (_reader is not null) _reader.CurrentTime = _pendingPosition;
+        StateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static TimeSpan ClampPosition(TimeSpan position, int durationSeconds)
+    {
+        var maximum = Math.Max(0, durationSeconds);
+        return TimeSpan.FromSeconds(Math.Clamp(position.TotalSeconds, 0, maximum));
+    }
+
+    public void SetUiUpdates(bool enabled) { if (enabled) _timer.Start(); else _timer.Stop(); }
+
+    private void Output_PlaybackStopped(object? sender, StoppedEventArgs e)
+    {
+        _playing = false;
+        StateChanged?.Invoke(this, EventArgs.Empty);
+        if (e.Exception is not null) { Failed?.Invoke(this, FriendlyPlaybackError(e.Exception)); return; }
+        if (_reader is not null && _reader.TotalTime > TimeSpan.Zero && _reader.CurrentTime >= _reader.TotalTime - TimeSpan.FromMilliseconds(500))
+            _ = NextAsync(true);
+    }
+
+    private async Task PrefetchNextAsync()
+    {
+        if (_queue.Count < 2 || _currentTrack is null) return;
+        var current = _queue.ToList().FindIndex(track => track.Id == _currentTrack.Id);
+        var next = _queue[(current + 1 + _queue.Count) % _queue.Count];
+        if (_preparedFiles.ContainsKey(next.Id)) return;
+        try { _preparedFiles[next.Id] = await PrepareAudioAsync(next.Id, CancellationToken.None); }
+        catch { }
+    }
+
+    private async Task<string> PrepareAudioAsync(string videoId, CancellationToken token)
+    {
+        var task = _preparations.GetOrAdd(videoId, PrepareAudioCoreAsync);
+        try { return await task.WaitAsync(token); }
+        finally { if (task.IsCompleted) _preparations.TryRemove(videoId, out _); }
+    }
+
+    private async Task<string> PrepareAudioCoreAsync(string videoId)
+    {
+        Directory.CreateDirectory(_audioCache);
+        var path = Path.Combine(_audioCache, $"{videoId}.playable.m4a");
+        if (File.Exists(path) && new FileInfo(path).Length > 32_768)
+        {
+            File.SetLastAccessTimeUtc(path, DateTime.UtcNow);
+            return path;
+        }
+
+        var temporary = Path.Combine(_audioCache, $"{videoId}.source.m4a");
+        try
+        {
+            var url = await _provider.ResolveAsync(videoId);
+            var start = new ProcessStartInfo
+            {
+                FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "curl.exe"),
+                UseShellExecute = false, RedirectStandardError = true, CreateNoWindow = true
+            };
+            foreach (var argument in new[] { "--fail", "--location", "--silent", "--show-error", "--range", "0-", "--connect-timeout", "15", "--max-time", "180", "--output", temporary, url })
+                start.ArgumentList.Add(argument);
+            using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start the Windows audio transfer.");
+            var errorTask = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            var error = await errorTask;
+            if (process.ExitCode != 0) throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? "Audio download failed." : error.Trim());
+            var remux = new ProcessStartInfo
+            {
+                FileName = RuntimeTools.Ffmpeg, UseShellExecute = false,
+                RedirectStandardError = true, CreateNoWindow = true
+            };
+            foreach (var argument in new[] { "-hide_banner", "-loglevel", "error", "-y", "-i", temporary, "-map", "0:a:0", "-c", "copy", "-movflags", "+faststart", path })
+                remux.ArgumentList.Add(argument);
+            using var remuxProcess = Process.Start(remux) ?? throw new InvalidOperationException("FFmpeg is required to prepare this audio for Windows playback.");
+            var remuxErrorTask = remuxProcess.StandardError.ReadToEndAsync();
+            await remuxProcess.WaitForExitAsync();
+            var remuxError = await remuxErrorTask;
+            if (remuxProcess.ExitCode != 0) throw new InvalidOperationException(string.IsNullOrWhiteSpace(remuxError) ? "Windows audio preparation failed." : remuxError.Trim());
+            File.Delete(temporary);
+            _ = Task.Run(TrimAudioCache);
+            return path;
+        }
+        catch
+        {
+            try { File.Delete(temporary); } catch { }
+            try { File.Delete(path); } catch { }
+            throw;
+        }
+    }
+
+    private void TrimAudioCache()
+    {
+        try
+        {
+            const long maximumBytes = 750L * 1024 * 1024;
+            var files = new DirectoryInfo(_audioCache).GetFiles("*.playable.m4a").OrderByDescending(file => file.LastAccessTimeUtc).ToList();
+            var total = files.Sum(file => file.Length);
+            foreach (var file in files.AsEnumerable().Reverse())
+            {
+                if (total <= maximumBytes) break;
+                try { total -= file.Length; file.Delete(); } catch { }
+            }
+        }
+        catch { }
+    }
+
+    private static string FriendlyPlaybackError(Exception error) =>
+        error.Message.Contains("0x88890008", StringComparison.OrdinalIgnoreCase)
+            ? "Windows could not open the selected audio device."
+            : $"Couldn’t play this song: {error.Message}";
+
+    private void DisposePlayback()
+    {
+        if (_output is not null)
+        {
+            _output.PlaybackStopped -= Output_PlaybackStopped;
+            try { _output.Stop(); } catch { }
+            _output.Dispose(); _output = null;
+        }
+        _reader?.Dispose(); _reader = null;
+    }
+
+    public void Dispose()
+    {
+        _timer.Stop(); _loadCancel?.Cancel(); DisposePlayback(); _provider.Dispose();
+    }
+}
