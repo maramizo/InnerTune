@@ -18,6 +18,7 @@ public static class ReactiveDjIconRenderer
     private static readonly SolidColorBrush Purple = FrozenBrush(255, 151, 91, 255);
     private static readonly SolidColorBrush PurpleLight = FrozenBrush(255, 205, 164, 255);
     private static readonly SolidColorBrush White = FrozenBrush(255, 255, 249, 239);
+    private static readonly SolidColorBrush Iris = FrozenBrush(255, 255, 211, 104);
     private static readonly SolidColorBrush Eye = FrozenBrush(255, 20, 17, 30);
     private static readonly SolidColorBrush Deck = FrozenBrush(255, 36, 34, 48);
     private static readonly SolidColorBrush DeckEdge = FrozenBrush(255, 73, 66, 92);
@@ -100,23 +101,29 @@ public static class ReactiveDjIconRenderer
         drawing.DrawRoundedRectangle(Purple, null, new Rect(30, 42 + bob, 7, 18), 3.5, 3.5);
         drawing.DrawRoundedRectangle(Purple, null, new Rect(91, 42 + bob, 7, 18), 3.5, 3.5);
 
-        drawing.DrawEllipse(White, null, new Point(52, 49 + bob), 8, 11);
-        drawing.DrawEllipse(White, null, new Point(76, 49 + bob), 8, 11);
-        drawing.DrawEllipse(Eye, null, new Point(53, 51 + bob), 4.2, 6.5);
-        drawing.DrawEllipse(Eye, null, new Point(75, 51 + bob), 4.2, 6.5);
-        drawing.DrawEllipse(Purple, null, new Point(54, 54 + bob), 2.4, 3.2);
-        drawing.DrawEllipse(Purple, null, new Point(74, 54 + bob), 2.4, 3.2);
-        drawing.DrawEllipse(White, null, new Point(51.5, 47 + bob), 1.5, 1.8);
-        drawing.DrawEllipse(White, null, new Point(73.5, 47 + bob), 1.5, 1.8);
-        drawing.DrawEllipse(White, null, new Point(64, 65 + bob), 16, 10);
-        DrawPolygon(drawing, Purple, [new Point(60, 61 + bob), new Point(68, 61 + bob), new Point(64, 65 + bob)]);
+        DrawCatEye(drawing, 51, 49 + bob, false);
+        DrawCatEye(drawing, 77, 49 + bob, true);
+
+        var whiskerPen = FrozenPen(FrozenBrush(225, 255, 249, 239), 2.1);
+        drawing.DrawLine(whiskerPen, new Point(57, 65 + bob), new Point(41, 62 + bob));
+        drawing.DrawLine(whiskerPen, new Point(56, 69 + bob), new Point(39, 70 + bob));
+        drawing.DrawLine(whiskerPen, new Point(57, 72 + bob), new Point(42, 77 + bob));
+        drawing.DrawLine(whiskerPen, new Point(71, 65 + bob), new Point(87, 62 + bob));
+        drawing.DrawLine(whiskerPen, new Point(72, 69 + bob), new Point(89, 70 + bob));
+        drawing.DrawLine(whiskerPen, new Point(71, 72 + bob), new Point(86, 77 + bob));
+
+        drawing.DrawEllipse(White, null, new Point(58.5, 66.5 + bob), 9.5, 7.5);
+        drawing.DrawEllipse(White, null, new Point(69.5, 66.5 + bob), 9.5, 7.5);
+        drawing.DrawEllipse(White, null, new Point(64, 72 + bob), 7, 4.5);
+        DrawPolygon(drawing, Purple, [new Point(59.5, 61.5 + bob), new Point(68.5, 61.5 + bob), new Point(64, 66 + bob)]);
         var mouth = new StreamGeometry();
         using (var geometry = mouth.Open())
         {
-            geometry.BeginFigure(new Point(64, 65 + bob), false, false);
-            geometry.BezierTo(new Point(61, 70 + bob), new Point(57, 68 + bob), new Point(57, 67 + bob), true, false);
-            geometry.BeginFigure(new Point(64, 65 + bob), false, false);
-            geometry.BezierTo(new Point(67, 70 + bob), new Point(71, 68 + bob), new Point(71, 67 + bob), true, false);
+            geometry.BeginFigure(new Point(64, 66 + bob), false, false);
+            geometry.LineTo(new Point(64, 69 + bob), true, false);
+            geometry.BezierTo(new Point(61, 73 + bob), new Point(57.5, 71 + bob), new Point(57.5, 69.5 + bob), true, false);
+            geometry.BeginFigure(new Point(64, 69 + bob), false, false);
+            geometry.BezierTo(new Point(67, 73 + bob), new Point(70.5, 71 + bob), new Point(70.5, 69.5 + bob), true, false);
         }
         mouth.Freeze();
         drawing.DrawGeometry(null, FrozenPen(Eye, 1.8), mouth);
@@ -145,6 +152,28 @@ public static class ReactiveDjIconRenderer
     {
         drawing.DrawLine(FrozenPen(Purple, 15), shoulder, hand);
         drawing.DrawLine(FrozenPen(InkLight, 11), shoulder, hand);
+    }
+
+    private static void DrawCatEye(DrawingContext drawing, double centerX, double centerY, bool mirrored)
+    {
+        var direction = mirrored ? -1 : 1;
+        var eye = new StreamGeometry();
+        using (var geometry = eye.Open())
+        {
+            geometry.BeginFigure(new Point(centerX - 10, centerY), true, true);
+            geometry.BezierTo(
+                new Point(centerX - 5, centerY - 7),
+                new Point(centerX + 5, centerY - 7),
+                new Point(centerX + 10, centerY), true, false);
+            geometry.BezierTo(
+                new Point(centerX + 5, centerY + 7),
+                new Point(centerX - 5, centerY + 7),
+                new Point(centerX - 10, centerY), true, false);
+        }
+        eye.Freeze();
+        drawing.DrawGeometry(Iris, FrozenPen(White, 1.4), eye);
+        drawing.DrawEllipse(Eye, null, new Point(centerX + direction * .7, centerY + .5), 2.1, 6.2);
+        drawing.DrawEllipse(White, null, new Point(centerX - direction * 2.4, centerY - 2.5), 1.35, 1.35);
     }
 
     private static void DrawPaw(DrawingContext drawing, Point center)

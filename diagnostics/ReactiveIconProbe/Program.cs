@@ -54,6 +54,10 @@ internal static class Program
         contact.Freeze();
         var contactPath = Path.Combine(outputDirectory, "contact-sheet.png");
         Save(contact, contactPath);
+        var idlePath = Path.Combine(outputDirectory, "idle.png");
+        var iconPath = Path.Combine(outputDirectory, "app.ico");
+        Save(frames[0], idlePath);
+        SaveIcon(frames[0], iconPath);
 
         var passed = frames.Length == AudioIconAnimator.FrameCount && hashes.Distinct().Count() == frames.Length;
         Console.WriteLine(JsonSerializer.Serialize(new
@@ -62,7 +66,9 @@ internal static class Program
             frameCount = frames.Length,
             uniqueFrames = hashes.Distinct().Count(),
             selected,
-            contactSheet = contactPath
+            contactSheet = contactPath,
+            idle = idlePath,
+            icon = iconPath
         }));
         return passed ? 0 : 1;
     }
@@ -82,5 +88,44 @@ internal static class Program
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using var output = File.Create(path);
         encoder.Save(output);
+    }
+
+    private static void SaveIcon(BitmapSource source, string path)
+    {
+        int[] sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256];
+        var images = sizes.Select(size => EncodePng(source, size)).ToArray();
+        using var output = new BinaryWriter(File.Create(path));
+        output.Write((ushort)0);
+        output.Write((ushort)1);
+        output.Write((ushort)sizes.Length);
+        var offset = 6 + sizes.Length * 16;
+        for (var index = 0; index < sizes.Length; index++)
+        {
+            output.Write((byte)(sizes[index] >= 256 ? 0 : sizes[index]));
+            output.Write((byte)(sizes[index] >= 256 ? 0 : sizes[index]));
+            output.Write((byte)0);
+            output.Write((byte)0);
+            output.Write((ushort)1);
+            output.Write((ushort)32);
+            output.Write(images[index].Length);
+            output.Write(offset);
+            offset += images[index].Length;
+        }
+        foreach (var image in images) output.Write(image);
+    }
+
+    private static byte[] EncodePng(BitmapSource source, int size)
+    {
+        var visual = new DrawingVisual();
+        RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
+        using (var drawing = visual.RenderOpen()) drawing.DrawImage(source, new Rect(0, 0, size, size));
+        var bitmap = new RenderTargetBitmap(size, size, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(bitmap));
+        using var output = new MemoryStream();
+        encoder.Save(output);
+        return output.ToArray();
     }
 }
