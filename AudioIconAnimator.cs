@@ -24,7 +24,7 @@ public sealed class AudioIconAnimator
 
         var input = Math.Clamp(level, 0, 1);
         var elapsed = Math.Clamp(elapsedSeconds, .025, .5);
-        _tempo.Update(input, elapsed);
+        if (_tempo.IsSampling) _tempo.Update(input, elapsed);
         _envelope += (input - _envelope) * (input > _envelope ? .62f : .22f);
         _reference = Math.Max(_envelope, Math.Max(.05f, _reference * .992f));
         if (input < .004f && _envelope < .012f) return 0;

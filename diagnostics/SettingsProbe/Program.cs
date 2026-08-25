@@ -19,7 +19,7 @@ var iconLevelsWork = iconAnimator.Update(0, false, true) == 0 &&
     animatedFrames.Min() >= AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, 0) &&
     animatedFrames.Max() <= AudioIconAnimator.FrameCount - 1 &&
     AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, AudioIconAnimator.PhaseCount - 1) == AudioIconAnimator.FrameCount - 1;
-static (double Bpm, int PhaseChanges) AnalyzeTempo(double bpm)
+static (double Bpm, int PhaseChanges, bool Locked, bool Stable) AnalyzeTempo(double bpm)
 {
     var animator = new AudioIconAnimator();
     const double sampleSeconds = .125;
@@ -35,14 +35,22 @@ static (double Bpm, int PhaseChanges) AnalyzeTempo(double bpm)
         if (elapsed >= 8 && previousPhase >= 0 && phase != previousPhase) phaseChanges++;
         previousPhase = phase;
     }
-    return (animator.EstimatedBpm, phaseChanges);
+    var lockedBpm = animator.EstimatedBpm;
+    for (var elapsed = 0d; elapsed < 8; elapsed += sampleSeconds)
+    {
+        var beatPosition = elapsed % (60 / 137d);
+        var level = beatPosition < sampleSeconds ? .9f : .04f;
+        animator.Update(level, true, true, sampleSeconds);
+    }
+    return (lockedBpm, phaseChanges, animator.HasTempoEstimate, Math.Abs(animator.EstimatedBpm - lockedBpm) < .001);
 }
 var slowTempo = AnalyzeTempo(80);
 var fastTempo = AnalyzeTempo(160);
 var tempoTrackingWorks = Math.Abs(slowTempo.Bpm - 80) < 8 &&
     Math.Abs(fastTempo.Bpm - 160) < 12 &&
     fastTempo.Bpm > slowTempo.Bpm * 1.65 &&
-    fastTempo.PhaseChanges > slowTempo.PhaseChanges * 1.25;
+    fastTempo.PhaseChanges > slowTempo.PhaseChanges * 1.25 &&
+    slowTempo.Locked && fastTempo.Locked && slowTempo.Stable && fastTempo.Stable;
 var signal = new SignalGenerator(48_000, 2) { Frequency = 440, Gain = .7, Type = SignalGeneratorType.Sin };
 var meter = new MeteringSampleProvider(signal, 6_000);
 var measuredPeak = 0f;
@@ -120,6 +128,8 @@ Console.WriteLine(JsonSerializer.Serialize(new
     fastTempo = fastTempo.Bpm,
     slowPhaseChanges = slowTempo.PhaseChanges,
     fastPhaseChanges = fastTempo.PhaseChanges,
+    tempoLocksAfterSample = slowTempo.Locked && fastTempo.Locked,
+    tempoRemainsStable = slowTempo.Stable && fastTempo.Stable,
     audioMeterWorks,
     pathMergeWorks,
     installerEnvironmentWorks,

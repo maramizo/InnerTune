@@ -1,28 +1,36 @@
 namespace InnerTune;
 
 /// <summary>
-/// Estimates musical tempo from the low-rate level samples already produced by
-/// the player. This deliberately avoids a second decoder or an FFT so the tray
-/// animation stays inexpensive while the main window is hidden.
+/// Estimates musical tempo from one bounded opening window of the low-rate
+/// level samples already produced by the player. The result is then locked for
+/// the song. This avoids a second decoder, an FFT, and continuously shifting
+/// animation timing while the main window is hidden.
 /// </summary>
 public sealed class BeatTempoTracker
 {
     public const double DefaultBpm = 108;
     public const double MinimumBpm = 68;
     public const double MaximumBpm = 190;
+    public const double SampleWindowSeconds = 8;
+    public const double MaximumSampleSeconds = 12;
+    private const int MinimumCandidates = 4;
 
     private readonly Queue<double> _recentBpms = new();
     private double _clock;
     private double _lastBeatAt = double.NegativeInfinity;
+    private double _candidateBpm = DefaultBpm;
     private float _floor = .02f;
     private float _previous;
     private float _previousPrevious;
 
     public double Bpm { get; private set; } = DefaultBpm;
-    public bool HasEstimate => _recentBpms.Count >= 2;
+    public bool HasEstimate => IsLocked && _recentBpms.Count >= 2;
+    public bool IsLocked { get; private set; }
+    public bool IsSampling => !IsLocked;
 
     public void Update(float level, double elapsedSeconds)
     {
+        if (!IsSampling) return;
         var elapsed = Math.Clamp(elapsedSeconds, .025, .5);
         _clock += elapsed;
         level = Math.Clamp(level, 0, 1);
@@ -58,7 +66,7 @@ public sealed class BeatTempoTracker
                     var median = ordered.Length % 2 == 0
                         ? (ordered[middle - 1] + ordered[middle]) / 2
                         : ordered[middle];
-                    Bpm += (median - Bpm) * (_recentBpms.Count < 3 ? .55 : .28);
+                    _candidateBpm += (median - _candidateBpm) * (_recentBpms.Count < 3 ? .55 : .28);
                 }
             }
             _lastBeatAt = peakAt;
@@ -66,6 +74,13 @@ public sealed class BeatTempoTracker
 
         _previousPrevious = _previous;
         _previous = level;
+
+        if ((_clock >= SampleWindowSeconds && _recentBpms.Count >= MinimumCandidates) ||
+            _clock >= MaximumSampleSeconds)
+        {
+            if (_recentBpms.Count >= 2) Bpm = Math.Clamp(_candidateBpm, MinimumBpm, MaximumBpm);
+            IsLocked = true;
+        }
     }
 
     public void Reset()
@@ -73,9 +88,11 @@ public sealed class BeatTempoTracker
         _recentBpms.Clear();
         _clock = 0;
         _lastBeatAt = double.NegativeInfinity;
+        _candidateBpm = DefaultBpm;
         _floor = .02f;
         _previous = 0;
         _previousPrevious = 0;
         Bpm = DefaultBpm;
+        IsLocked = false;
     }
 }
