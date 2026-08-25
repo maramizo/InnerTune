@@ -50,6 +50,8 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _miniQueueCloseTimer = new() { Interval = TimeSpan.FromMilliseconds(220) };
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(4) };
     private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(12) };
+    private readonly DispatcherTimer _iconAnimationTimer = new(DispatcherPriority.Render)
+        { Interval = TimeSpan.FromMilliseconds(1000d / 30) };
     private LibraryData _library = new();
     private FileSystemWatcher? _watcher;
     private Forms.NotifyIcon? _tray;
@@ -60,8 +62,7 @@ public partial class MainWindow : Window
     private readonly AudioIconAnimator _djIconAnimator = new();
     private string? _djIconTrackId;
     private DateTime _lastIconFrameAt;
-    private int _iconUpdateQueued;
-    private float _pendingAudioLevel;
+    private volatile float _pendingAudioLevel;
     private readonly Dictionary<ItemsControl, IEnumerable?> _suspendedItemSources = [];
     private bool _reallyClose;
     private bool _mini;
@@ -135,6 +136,8 @@ public partial class MainWindow : Window
         _miniQueueCloseTimer.Tick += (_, _) => { _miniQueueCloseTimer.Stop(); if (!_pointerOverNowPlaying && !_pointerOverMiniQueue) MiniQueuePopup.IsOpen = false; };
         _statusTimer.Tick += (_, _) => { _statusTimer.Stop(); StatusPill.Visibility = Visibility.Collapsed; };
         _updateTimer.Tick += async (_, _) => await CheckForUpdatesAsync(false);
+        _iconAnimationTimer.Tick += (_, _) => RenderAudioMotionTick();
+        _iconAnimationTimer.Start();
         Loaded += MainWindow_Loaded;
         SizeChanged += (_, _) => ApplyPlayerBarLayout();
         IsVisibleChanged += (_, _) => { _player.SetUiUpdates(IsVisible); if (!IsVisible) { if (_videoActive) CloseVideo(); CloseVideoChooser(); CloseMiniQueue(); TrimWorkingSet(); } };
@@ -694,7 +697,6 @@ public partial class MainWindow : Window
             return;
         }
         var now = DateTime.UtcNow;
-        if (now - _lastIconFrameAt < TimeSpan.FromMilliseconds(30)) return;
         var trackId = _player.CurrentTrack?.Id;
         if (!string.Equals(trackId, _djIconTrackId, StringComparison.Ordinal))
         {
@@ -727,17 +729,16 @@ public partial class MainWindow : Window
         _djIconAnimator.SetMotionProfile(danceability, peakLoudness);
     }
 
-    private void QueueAnimatedIconUpdate(float level)
+    private void QueueAnimatedIconUpdate(float level) => _pendingAudioLevel = level;
+
+    private void RenderAudioMotionTick()
     {
-        _pendingAudioLevel = level;
-        if (Interlocked.Exchange(ref _iconUpdateQueued, 1) != 0) return;
-        Dispatcher.BeginInvoke(() =>
+        if (IsVisible)
         {
-            Interlocked.Exchange(ref _iconUpdateQueued, 0);
             QueueEqualizerLevel = Math.Clamp(_pendingAudioLevel, 0, 1);
             QueueEqualizerPhase = (QueueEqualizerPhase + .20 + QueueEqualizerLevel * .58) % (Math.PI * 2);
-            UpdateAnimatedIcon(_pendingAudioLevel);
-        }, DispatcherPriority.Background);
+        }
+        UpdateAnimatedIcon(_pendingAudioLevel);
     }
 
     private void SetDjFrame(int frame)
@@ -2600,6 +2601,7 @@ public partial class MainWindow : Window
         _miniQueueCloseTimer.Stop();
         _statusTimer.Stop();
         _updateTimer.Stop();
+        _iconAnimationTimer.Stop();
         _watcher?.Dispose();
         _watcher = null;
         _agent.Cancel();

@@ -326,6 +326,7 @@ public sealed class PlayerService : IDisposable
             foreach (var argument in new[] { "--fail", "--location", "--silent", "--show-error", "--range", "0-", "--connect-timeout", "15", "--max-time", "180", "--output", temporary, url })
                 start.ArgumentList.Add(argument);
             using var process = Process.Start(start) ?? throw new InvalidOperationException("Could not start the Windows audio transfer.");
+            LowerBackgroundPriority(process);
             var errorTask = process.StandardError.ReadToEndAsync();
             await process.WaitForExitAsync();
             var error = await errorTask;
@@ -338,6 +339,7 @@ public sealed class PlayerService : IDisposable
             foreach (var argument in new[] { "-hide_banner", "-loglevel", "error", "-y", "-i", temporary, "-map", "0:a:0", "-c", "copy", "-movflags", "+faststart", path })
                 remux.ArgumentList.Add(argument);
             using var remuxProcess = Process.Start(remux) ?? throw new InvalidOperationException("FFmpeg is required to prepare this audio for Windows playback.");
+            LowerBackgroundPriority(remuxProcess);
             var remuxErrorTask = remuxProcess.StandardError.ReadToEndAsync();
             await remuxProcess.WaitForExitAsync();
             var remuxError = await remuxErrorTask;
@@ -406,6 +408,12 @@ public sealed class PlayerService : IDisposable
                 try { total -= file.Length; file.Delete(); } catch { }
             }
         }
+        catch { }
+    }
+
+    private static void LowerBackgroundPriority(Process process)
+    {
+        try { process.PriorityClass = ProcessPriorityClass.BelowNormal; }
         catch { }
     }
 

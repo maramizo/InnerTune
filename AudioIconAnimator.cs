@@ -13,10 +13,6 @@ public sealed class AudioIconAnimator
     private float _reference = .08f;
     private double _phase;
     private double _bpm = BeatTempoTracker.DefaultBpm;
-    private int _activeAmplitudeLevel;
-    private int _pendingAmplitudeLevel;
-    private int _lastRenderedPhase = -1;
-    private bool _activeJump;
     private bool _jumpRequested;
     private float _sustainedLoudness;
     private float _songMaximumLoudness = .08f;
@@ -42,7 +38,7 @@ public sealed class AudioIconAnimator
         var normalized = Math.Clamp(_envelope / _reference, 0, 1);
         var audible = Math.Clamp(input / .045f, 0, 1);
         var energy = Math.Clamp(MathF.Sqrt(normalized) * (.35f + .65f * audible), 0, 1);
-        _pendingAmplitudeLevel = input < .004f && _envelope < .012f
+        var amplitudeLevel = input < .004f && _envelope < .012f
             ? 0
             : Math.Clamp((int)MathF.Round(energy * (LevelCount - 1)), 1, LevelCount - 1);
 
@@ -56,36 +52,19 @@ public sealed class AudioIconAnimator
         else if (_jumpRequested && raveEnergy <= JumpStopThreshold) _jumpRequested = false;
 
         var phase = (int)Math.Floor(_phase);
-        if (_activeAmplitudeLevel == 0 && _pendingAmplitudeLevel > 0)
-        {
-            // Always enter the choreography from a grounded pose, even when
-            // audio starts between the normal rest points.
-            _phase = 0;
-            phase = 0;
-            _lastRenderedPhase = -1;
-        }
-
-        if (IsRestPhase(phase) && phase != _lastRenderedPhase)
-        {
-            // Changing pose banks in the air visually teleports the paws and
-            // reads as a stutter. Loudness and jumping therefore only change
-            // while both paws and the cat are back on the deck.
-            _activeAmplitudeLevel = _pendingAmplitudeLevel;
-            _activeJump = _jumpRequested;
-        }
-
-        var frame = _activeAmplitudeLevel <= 0
+        var frame = amplitudeLevel <= 0
             ? 0
-            : _activeJump
+            : _jumpRequested
                 ? EncodeJump(phase)
-                : Encode(_activeAmplitudeLevel, phase);
+                : Encode(amplitudeLevel, phase);
 
         // One complete gesture spans two beats. Twenty-four poses at the
         // player's 30 Hz meter rate keep motion fluid while still making
-        // fast tracks visibly more energetic than slow ones. Never skip a pose:
-        // the grounded frames are also the safe state-transition boundary.
-        var phaseAdvance = Math.Min(1, elapsed * _bpm / 60 * PhaseCount / 2);
-        _lastRenderedPhase = phase;
+        // fast tracks visibly more energetic than slow ones.
+        // If Windows delays a render tick (for example while a cache transfer
+        // finishes), catch up to musical time instead of replaying stale poses
+        // in slow motion.
+        var phaseAdvance = elapsed * _bpm / 60 * PhaseCount / 2;
         _phase = (_phase + phaseAdvance) % PhaseCount;
         return frame;
     }
@@ -107,10 +86,6 @@ public sealed class AudioIconAnimator
         _envelope = 0;
         _reference = .08f;
         _phase = 0;
-        _activeAmplitudeLevel = 0;
-        _pendingAmplitudeLevel = 0;
-        _lastRenderedPhase = -1;
-        _activeJump = false;
         _jumpRequested = false;
         _sustainedLoudness = 0;
     }

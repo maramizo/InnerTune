@@ -59,22 +59,18 @@ internal static class Program
         Save(frames[0], idlePath);
         SaveIcon(frames[0], iconPath);
 
-        var normalRestHashes = new[]
-        {
-            hashes[AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, 0)],
-            hashes[AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, AudioIconAnimator.PhaseCount / 2)]
-        };
-        var jumpLandsCleanly = hashes[AudioIconAnimator.EncodeJump(0)] == normalRestHashes[0] &&
-            hashes[AudioIconAnimator.EncodeJump(AudioIconAnimator.PhaseCount / 2)] == normalRestHashes[1];
+        var jumpPosesOwnTheGesture = Enumerable.Range(0, AudioIconAnimator.PhaseCount)
+            .All(phase => hashes[AudioIconAnimator.EncodeJump(phase)] !=
+                hashes[AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, phase)]);
         var passed = frames.Length == AudioIconAnimator.FrameCount &&
-            hashes.Distinct().Count() == frames.Length - 2 &&
-            jumpLandsCleanly;
+            hashes.Distinct().Count() == frames.Length &&
+            jumpPosesOwnTheGesture;
         Console.WriteLine(JsonSerializer.Serialize(new
         {
             passed,
             frameCount = frames.Length,
             uniqueFrames = hashes.Distinct().Count(),
-            jumpLandsCleanly,
+            jumpPosesOwnTheGesture,
             selected,
             contactSheet = contactPath,
             idle = idlePath,

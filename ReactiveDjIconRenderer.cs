@@ -72,9 +72,12 @@ public static class ReactiveDjIconRenderer
 
     private static void DrawCat(DrawingContext drawing, double amplitude, double angle, bool jumping)
     {
-        var cycle = angle / (Math.PI * 2);
-        var leftLift = amplitude * GesturePulse(cycle, .25, .25);
-        var rightLift = amplitude * GesturePulse(cycle, .75, .25);
+        // One paw works the deck while the other stays raised. During a jump,
+        // the airborne pose takes over and throws both paws overhead.
+        var alternation = .5 + .5 * Math.Cos(angle);
+        alternation = alternation * alternation * (3 - 2 * alternation);
+        var leftLift = jumping ? amplitude : amplitude * alternation;
+        var rightLift = jumping ? amplitude : amplitude * (1 - alternation);
         var gesture = Math.Max(leftLift, rightLift);
         var jump = jumping ? Math.Abs(Math.Sin(angle)) : 0;
         // The resting cat sits into the deck; rave frames lift the whole body
@@ -169,13 +172,6 @@ public static class ReactiveDjIconRenderer
 
         DrawPaw(drawing, leftHand);
         DrawPaw(drawing, rightHand);
-    }
-
-    private static double GesturePulse(double cycle, double center, double halfWidth)
-    {
-        var distance = Math.Abs(cycle - center);
-        if (distance >= halfWidth) return 0;
-        return .5 + .5 * Math.Cos(distance / halfWidth * Math.PI);
     }
 
     private static void DrawArm(DrawingContext drawing, Point shoulder, Point hand)

@@ -21,6 +21,13 @@ var iconLevelsWork = iconAnimator.Update(0, false, true) == 0 &&
     animatedFrames.Min() >= AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, 0) &&
     animatedFrames.Max() <= AudioIconAnimator.FrameCount - 1 &&
     AudioIconAnimator.EncodeJump(AudioIconAnimator.PhaseCount - 1) == AudioIconAnimator.FrameCount - 1;
+var catchUpAnimator = new AudioIconAnimator();
+catchUpAnimator.SetTempo(120);
+for (var tick = 0; tick < 10; tick++) catchUpAnimator.Update(.7f, true, true, 1d / 30);
+var phaseBeforeDelay = AudioIconAnimator.DecodePhase(catchUpAnimator.Update(.7f, true, true, 1d / 30));
+catchUpAnimator.Update(.7f, true, true, .20);
+var phaseAfterDelay = AudioIconAnimator.DecodePhase(catchUpAnimator.Update(.7f, true, true, 1d / 30));
+var delayedTickCatchesUp = (phaseAfterDelay - phaseBeforeDelay + AudioIconAnimator.PhaseCount) % AudioIconAnimator.PhaseCount >= 4;
 var latchingAnimator = new AudioIconAnimator();
 latchingAnimator.SetTempo(120);
 latchingAnimator.SetMotionProfile(.92, .78);
@@ -28,7 +35,7 @@ var priorLevel = 0;
 var priorJump = false;
 var sawLevelChange = false;
 var sawJump = false;
-var motionChangesOnlyAtRest = true;
+var sawOffRestTransition = false;
 for (var sample = 0; sample < 360; sample++)
 {
     var level = sample % 48 < 24 ? .95f : .03f;
@@ -39,12 +46,12 @@ for (var sample = 0; sample < 360; sample++)
     {
         sawLevelChange |= frameLevel != priorLevel;
         sawJump |= jumping;
-        motionChangesOnlyAtRest &= AudioIconAnimator.IsRestPhase(AudioIconAnimator.DecodePhase(frame));
+        sawOffRestTransition |= !AudioIconAnimator.IsRestPhase(AudioIconAnimator.DecodePhase(frame));
     }
     priorLevel = frameLevel;
     priorJump = jumping;
 }
-var groundedMotionTransitionsWork = sawLevelChange && sawJump && motionChangesOnlyAtRest;
+var immediateMotionTransitionsWork = sawLevelChange && sawJump && sawOffRestTransition;
 var offBeatJumpAnimator = new AudioIconAnimator();
 offBeatJumpAnimator.SetTempo(120);
 offBeatJumpAnimator.SetMotionProfile(1, .35);
@@ -65,7 +72,15 @@ var pianoEnvelope = Enumerable.Range(0, 96).Select(index => .18f + .05f * (float
 var pianoLowEnvelope = pianoEnvelope.Select(value => value * .18f).ToArray();
 var danceScore = RepresentativeTempoAnalyzer.EstimateDanceability(danceEnvelope, danceLowEnvelope, 120);
 var pianoScore = RepresentativeTempoAnalyzer.EstimateDanceability(pianoEnvelope, pianoLowEnvelope, 120);
-var raveClassificationWorks = danceScore >= .58 && pianoScore <= .45 && danceScore > pianoScore + .25;
+var denseRockEnvelope = Enumerable.Range(0, 96)
+    .Select(index => .25f + (index % 4 == 0 ? .045f : 0) + .008f * (float)Math.Sin(index * .71))
+    .ToArray();
+var denseRockLowEnvelope = Enumerable.Range(0, 96)
+    .Select(index => .10f + (index % 4 == 0 ? .024f : 0))
+    .ToArray();
+var denseRockScore = RepresentativeTempoAnalyzer.EstimateDanceability(denseRockEnvelope, denseRockLowEnvelope, 120);
+var raveClassificationWorks = danceScore >= .58 && denseRockScore >= .58 &&
+    pianoScore <= .45 && danceScore > pianoScore + .25 && denseRockScore > pianoScore + .20;
 static (double Bpm, int PhaseChanges, bool Locked, bool Stable) AnalyzeTempo(double bpm)
 {
     var tracker = new BeatTempoTracker();
@@ -201,11 +216,11 @@ finally
 {
     if (Directory.Exists(playbackRoot)) Directory.Delete(playbackRoot, true);
 }
-TempoAnalysis? inspectedAnalysis = null;
-double? inspectedJumpCoverage = null;
-if (args.FirstOrDefault() is { Length: > 0 } inspectedPath && File.Exists(inspectedPath))
+var inspectedTracks = new List<object>();
+foreach (var inspectedPath in args.Where(File.Exists))
 {
-    inspectedAnalysis = await RepresentativeTempoAnalyzer.AnalyzeAsync(inspectedPath);
+    var inspectedAnalysis = await RepresentativeTempoAnalyzer.AnalyzeAsync(inspectedPath);
+    double? inspectedJumpCoverage = null;
     if (inspectedAnalysis is not null)
     {
         using var inspectedReader = new MediaFoundationReader(inspectedPath);
@@ -227,8 +242,9 @@ if (args.FirstOrDefault() is { Length: > 0 } inspectedPath && File.Exists(inspec
         while (inspectedMeter.Read(inspectedBuffer, 0, inspectedBuffer.Length) > 0) { }
         inspectedJumpCoverage = inspectedFrames == 0 ? 0 : inspectedJumpFrames / (double)inspectedFrames;
     }
+    inspectedTracks.Add(new { path = inspectedPath, analysis = inspectedAnalysis, jumpCoverage = inspectedJumpCoverage });
 }
-var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && groundedMotionTransitionsWork && offBeatLandingStillJumps && pianoDoesNotJump && raveClassificationWorks && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
+var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && delayedTickCatchesUp && immediateMotionTransitionsWork && offBeatLandingStillJumps && pianoDoesNotJump && raveClassificationWorks && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed,
@@ -236,11 +252,13 @@ Console.WriteLine(JsonSerializer.Serialize(new
     defaultIcon = new AppSettings().Icon,
     animatedIconDefault = new AppSettings().AnimatedIconEnabled,
     audioIconLevelsWork = iconLevelsWork,
-    groundedMotionTransitionsWork,
+    delayedTickCatchesUp,
+    immediateMotionTransitionsWork,
     offBeatLandingStillJumps,
     pianoDoesNotJump,
     raveClassificationWorks,
     danceScore,
+    denseRockScore,
     pianoScore,
     tempoTrackingWorks,
     slowTempo = slowTempo.Bpm,
@@ -258,8 +276,7 @@ Console.WriteLine(JsonSerializer.Serialize(new
     pathMergeWorks,
     installerEnvironmentWorks,
     playbackStoreWorks,
-    inspectedAnalysis,
-    inspectedJumpCoverage,
+    inspectedTracks,
     autoResumeDefault = new AppSettings().AutoResumeOnStart,
     optInResumesPlaying = optInResumesOnlyPlaying
 }));

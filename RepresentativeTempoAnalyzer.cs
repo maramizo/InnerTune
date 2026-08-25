@@ -8,7 +8,21 @@ public sealed record TempoAnalysis(
     double SampleLoudness,
     double AverageLoudness,
     double PeakLoudness,
-    double Danceability);
+    double Danceability,
+    DanceMetrics DanceMetrics);
+
+public sealed record DanceMetrics(
+    double Score,
+    double Pulse,
+    double OnsetPulse,
+    double BroadOnsetPulse,
+    double BassRhythm,
+    double BassPresence,
+    double SustainedEnergy,
+    double Compression,
+    double DenseRhythmicEnergy,
+    double TransientStrength,
+    double TempoFit);
 
 public static class RepresentativeTempoAnalyzer
 {
@@ -75,7 +89,7 @@ public static class RepresentativeTempoAnalyzer
             if (tracker.IsLocked) break;
         }
         if (!tracker.HasEstimate) return null;
-        var danceability = EstimateDanceability(tempoFeatures.Full, tempoFeatures.Low, tracker.Bpm);
+        var danceMetrics = MeasureDanceability(tempoFeatures.Full, tempoFeatures.Low, tracker.Bpm);
         var peakLoudness = Math.Max(
             sampledPeaks.Count == 0 ? 0 : sampledPeaks.Max(),
             tempoFeatures.Full.Count == 0 ? 0 : tempoFeatures.Full.Max());
@@ -85,29 +99,68 @@ public static class RepresentativeTempoAnalyzer
             loudness[selected],
             loudness.Average(),
             peakLoudness,
-            danceability);
+            danceMetrics.Score,
+            danceMetrics);
     }
 
     public static double EstimateDanceability(
         IReadOnlyList<float> fullEnvelope,
         IReadOnlyList<float> lowEnvelope,
+        double bpm) => MeasureDanceability(fullEnvelope, lowEnvelope, bpm).Score;
+
+    public static DanceMetrics MeasureDanceability(
+        IReadOnlyList<float> fullEnvelope,
+        IReadOnlyList<float> lowEnvelope,
         double bpm)
     {
         var count = Math.Min(fullEnvelope.Count, lowEnvelope.Count);
-        if (count < 16) return 0;
+        if (count < 16) return new DanceMetrics(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         var full = fullEnvelope.Take(count).Select(value => (double)value).ToArray();
         var low = lowEnvelope.Take(count).Select(value => (double)value).ToArray();
         var mean = Math.Max(.0001, full.Average());
-        var pulse = Periodicity(full, bpm);
+        var rawPulse = Periodicity(full, bpm);
+        var fullOnsets = OnsetEnvelope(full);
+        var lowOnsets = OnsetEnvelope(low);
+        var onsetPulse = Periodicity(fullOnsets, bpm);
+        var broadOnsetPulse = RhythmicPeriodicity(fullOnsets);
+        var pulse = Math.Max(rawPulse, Math.Max(onsetPulse, broadOnsetPulse));
         var lowPulse = Periodicity(low, bpm);
+        var lowOnsetPulse = Math.Max(Periodicity(lowOnsets, bpm), RhythmicPeriodicity(lowOnsets));
         var bassShare = Math.Clamp(low.Average() / mean, 0, 1);
+        var bassPresence = SmoothStep(.12, .46, bassShare);
+        var sustainedEnergy = SmoothStep(.10, .28, mean);
+        var compression = SmoothStep(.46, .76, mean / Math.Max(mean, full.Max()));
         var positiveFlux = Enumerable.Range(1, count - 1)
             .Average(index => Math.Max(0, full[index] - full[index - 1])) / mean;
         var transientStrength = SmoothStep(.035, .28, positiveFlux);
-        var bassRhythm = lowPulse * SmoothStep(.12, .46, bassShare);
+        var bassRhythm = Math.Max(lowPulse, lowOnsetPulse) * bassPresence;
         var tempoFit = SmoothStep(72, 96, bpm) * (1 - SmoothStep(178, 194, bpm));
-        return Math.Clamp(.42 * pulse + .25 * bassRhythm + .21 * transientStrength + .12 * tempoFit, 0, 1);
+        var rhythmicScore = .42 * pulse + .25 * bassRhythm + .21 * transientStrength + .12 * tempoFit;
+        var rhythmicSupport = Math.Max(pulse, Math.Max(bassRhythm, transientStrength));
+        // Dense rock often has a nearly flat RMS envelope because the master is
+        // continuously loud. Its beat disappears from coarse autocorrelation,
+        // so combine sustained energy, compression and bass presence with the
+        // rhythmic evidence instead of treating the flat envelope as calm.
+        var denseRhythmicEnergy = sustainedEnergy * compression * bassPresence * tempoFit *
+            (.65 + .35 * rhythmicSupport);
+        var score = Math.Clamp(Math.Max(rhythmicScore, denseRhythmicEnergy), 0, 1);
+        return new DanceMetrics(score, rawPulse, onsetPulse, broadOnsetPulse, bassRhythm, bassPresence,
+            sustainedEnergy, compression, denseRhythmicEnergy, transientStrength, tempoFit);
     }
+
+    private static double[] OnsetEnvelope(IReadOnlyList<double> values)
+    {
+        var onsets = new double[values.Count];
+        for (var index = 1; index < values.Count; index++)
+            onsets[index] = Math.Max(0, values[index] - values[index - 1]);
+        return onsets;
+    }
+
+    private static double RhythmicPeriodicity(IReadOnlyList<double> values) =>
+        Enumerable.Range(3, 5)
+            .Select(lag => Math.Max(0, Correlation(values, lag)))
+            .DefaultIfEmpty(0)
+            .Max();
 
     private static double Periodicity(IReadOnlyList<double> values, double bpm)
     {
