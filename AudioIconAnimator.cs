@@ -3,16 +3,16 @@ namespace InnerTune;
 public sealed class AudioIconAnimator
 {
     public const int LevelCount = 6;
-    public const int PhaseCount = 8;
+    public const int PhaseCount = 12;
     public const int FrameCount = 1 + (LevelCount - 1) * PhaseCount;
 
     private float _envelope;
     private float _reference = .08f;
     private double _phase;
-    private readonly BeatTempoTracker _tempo = new();
+    private double _bpm = BeatTempoTracker.DefaultBpm;
 
-    public double EstimatedBpm => _tempo.Bpm;
-    public bool HasTempoEstimate => _tempo.HasEstimate;
+    public double EstimatedBpm => _bpm;
+    public bool HasTempoEstimate { get; private set; }
 
     public int Update(float level, bool playing, bool enabled, double elapsedSeconds = .125)
     {
@@ -24,7 +24,6 @@ public sealed class AudioIconAnimator
 
         var input = Math.Clamp(level, 0, 1);
         var elapsed = Math.Clamp(elapsedSeconds, .025, .5);
-        if (_tempo.IsSampling) _tempo.Update(input, elapsed);
         _envelope += (input - _envelope) * (input > _envelope ? .62f : .22f);
         _reference = Math.Max(_envelope, Math.Max(.05f, _reference * .992f));
         if (input < .004f && _envelope < .012f) return 0;
@@ -34,11 +33,17 @@ public sealed class AudioIconAnimator
         var energy = Math.Clamp(MathF.Sqrt(normalized) * (.35f + .65f * audible), 0, 1);
         var amplitudeLevel = Math.Clamp((int)MathF.Round(energy * (LevelCount - 1)), 1, LevelCount - 1);
 
-        // One complete gesture spans two beats. That keeps all eight poses
-        // legible at the player's low-cost 8 Hz meter rate while still making
+        // One complete gesture spans two beats. That keeps all twelve poses
+        // legible at the player's low-cost 15 Hz meter rate while still making
         // fast tracks visibly more energetic than slow ones.
-        _phase = (_phase + elapsed * _tempo.Bpm / 60 * PhaseCount / 2) % PhaseCount;
+        _phase = (_phase + elapsed * _bpm / 60 * PhaseCount / 2) % PhaseCount;
         return Encode(amplitudeLevel, (int)Math.Floor(_phase));
+    }
+
+    public void SetTempo(double bpm)
+    {
+        _bpm = Math.Clamp(bpm, BeatTempoTracker.MinimumBpm, BeatTempoTracker.MaximumBpm);
+        HasTempoEstimate = true;
     }
 
     public void Reset()
@@ -46,7 +51,13 @@ public sealed class AudioIconAnimator
         _envelope = 0;
         _reference = .08f;
         _phase = 0;
-        _tempo.Reset();
+    }
+
+    public void ResetTempo()
+    {
+        Reset();
+        _bpm = BeatTempoTracker.DefaultBpm;
+        HasTempoEstimate = false;
     }
 
     public static int Encode(int level, int phase)

@@ -1,10 +1,9 @@
 namespace InnerTune;
 
 /// <summary>
-/// Estimates musical tempo from one bounded opening window of the low-rate
-/// level samples already produced by the player. The result is then locked for
-/// the song. This avoids a second decoder, an FFT, and continuously shifting
-/// animation timing while the main window is hidden.
+/// Estimates musical tempo from one bounded low-rate level envelope. The
+/// caller chooses the representative song window, and the result is locked
+/// once enough peaks have been observed.
 /// </summary>
 public sealed class BeatTempoTracker
 {

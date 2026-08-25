@@ -99,6 +99,7 @@ public partial class MainWindow : Window
         _player.StateChanged += (_, _) => Dispatcher.Invoke(() => { UpdatePlayerUi(); MarkPlaybackDirty(); });
         _player.Failed += (_, message) => Dispatcher.Invoke(() => SetStatus(message, true));
         _player.AudioLevelChanged += QueueAnimatedIconUpdate;
+        _player.TempoEstimated += (trackId, bpm) => Dispatcher.BeginInvoke(() => ApplyEstimatedTempo(trackId, bpm));
         _agent.Activity += (_, activity) => Dispatcher.Invoke(() => AddAgentActivity(activity));
         ChatMessages.ItemsSource = _chat;
         VideoCandidateList.ItemsSource = _videoCandidates;
@@ -543,6 +544,7 @@ public partial class MainWindow : Window
             CustomIconHint.Text = File.Exists(_library.Settings.CustomIconPath) ? "Custom image saved locally" : "PNG, JPG, or ICO";
             AnimatedIconToggle.IsChecked = _library.Settings.AnimatedIconEnabled;
             AnimatedIconToggle.IsEnabled = icon == "dj-cat";
+            _player.TempoAnalysisEnabled = icon == "dj-cat" && _library.Settings.AnimatedIconEnabled;
             AutoResumeToggle.IsChecked = _library.Settings.AutoResumeOnStart;
             UpdateTrayIcon();
             UpdatePlaybackModeButtons();
@@ -660,17 +662,22 @@ public partial class MainWindow : Window
         }
         if (!PlaybackIsPlaying || !_library.Settings.AnimatedIconEnabled)
         {
-            _djIconAnimator.Reset();
-            _djIconTrackId = _player.CurrentTrack?.Id;
+            var pausedTrackId = _player.CurrentTrack?.Id;
+            if (!string.Equals(pausedTrackId, _djIconTrackId, StringComparison.Ordinal))
+            {
+                _djIconAnimator.ResetTempo();
+                _djIconTrackId = pausedTrackId;
+            }
+            else _djIconAnimator.Reset();
             SetDjFrame(0);
             return;
         }
         var now = DateTime.UtcNow;
-        if (now - _lastIconFrameAt < TimeSpan.FromMilliseconds(80)) return;
+        if (now - _lastIconFrameAt < TimeSpan.FromMilliseconds(60)) return;
         var trackId = _player.CurrentTrack?.Id;
         if (!string.Equals(trackId, _djIconTrackId, StringComparison.Ordinal))
         {
-            _djIconAnimator.Reset();
+            _djIconAnimator.ResetTempo();
             _djIconTrackId = trackId;
             _lastIconFrameAt = default;
         }
@@ -679,6 +686,18 @@ public partial class MainWindow : Window
             : Math.Clamp((now - _lastIconFrameAt).TotalSeconds, .025, .5);
         _lastIconFrameAt = now;
         SetDjFrame(_djIconAnimator.Update(level, true, true, elapsed));
+    }
+
+    private void ApplyEstimatedTempo(string trackId, double bpm)
+    {
+        if (_player.CurrentTrack?.Id != trackId) return;
+        if (!string.Equals(trackId, _djIconTrackId, StringComparison.Ordinal))
+        {
+            _djIconAnimator.ResetTempo();
+            _djIconTrackId = trackId;
+            _lastIconFrameAt = default;
+        }
+        _djIconAnimator.SetTempo(bpm);
     }
 
     private void QueueAnimatedIconUpdate(float level)
@@ -769,6 +788,7 @@ public partial class MainWindow : Window
     {
         if (_applyingSettings || !_settingsLoaded) return;
         _library.Settings.AnimatedIconEnabled = AnimatedIconToggle.IsChecked == true;
+        _player.TempoAnalysisEnabled = _library.Settings.Icon == "dj-cat" && _library.Settings.AnimatedIconEnabled;
         if (!_library.Settings.AnimatedIconEnabled) SetDjFrame(0);
         await SaveAsync();
     }

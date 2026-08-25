@@ -1,5 +1,6 @@
 using System.Text.Json;
 using InnerTune;
+using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 
 var settings = new AppSettings();
@@ -13,7 +14,8 @@ var optInResumesOnlyPlaying = PlaybackRestorePolicy.ShouldAutoResume(playing, se
 var roundTrip = JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(settings));
 var serializationWorks = roundTrip is { AutoResumeOnStart: true, Theme: "midnight", Icon: "dj-cat" };
 var iconAnimator = new AudioIconAnimator();
-var animatedFrames = Enumerable.Range(0, 16).Select(_ => iconAnimator.Update(.8f, true, true)).ToArray();
+iconAnimator.SetTempo(100);
+var animatedFrames = Enumerable.Range(0, 36).Select(_ => iconAnimator.Update(.8f, true, true, 1d / 15)).ToArray();
 var iconLevelsWork = iconAnimator.Update(0, false, true) == 0 &&
     animatedFrames.Distinct().Count() >= AudioIconAnimator.PhaseCount &&
     animatedFrames.Min() >= AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, 0) &&
@@ -21,28 +23,34 @@ var iconLevelsWork = iconAnimator.Update(0, false, true) == 0 &&
     AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, AudioIconAnimator.PhaseCount - 1) == AudioIconAnimator.FrameCount - 1;
 static (double Bpm, int PhaseChanges, bool Locked, bool Stable) AnalyzeTempo(double bpm)
 {
-    var animator = new AudioIconAnimator();
+    var tracker = new BeatTempoTracker();
     const double sampleSeconds = .125;
     var beatSeconds = 60 / bpm;
-    var phaseChanges = 0;
-    var previousPhase = -1;
     for (var elapsed = 0d; elapsed < 12; elapsed += sampleSeconds)
     {
         var beatPosition = elapsed % beatSeconds;
         var level = beatPosition < sampleSeconds ? .85f : .055f;
-        var frame = animator.Update(level, true, true, sampleSeconds);
-        var phase = frame <= 0 ? -1 : (frame - 1) % AudioIconAnimator.PhaseCount;
-        if (elapsed >= 8 && previousPhase >= 0 && phase != previousPhase) phaseChanges++;
-        previousPhase = phase;
+        tracker.Update(level, sampleSeconds);
     }
-    var lockedBpm = animator.EstimatedBpm;
+    var lockedBpm = tracker.Bpm;
     for (var elapsed = 0d; elapsed < 8; elapsed += sampleSeconds)
     {
         var beatPosition = elapsed % (60 / 137d);
         var level = beatPosition < sampleSeconds ? .9f : .04f;
-        animator.Update(level, true, true, sampleSeconds);
+        tracker.Update(level, sampleSeconds);
     }
-    return (lockedBpm, phaseChanges, animator.HasTempoEstimate, Math.Abs(animator.EstimatedBpm - lockedBpm) < .001);
+    var animator = new AudioIconAnimator();
+    animator.SetTempo(lockedBpm);
+    var phaseChanges = 0;
+    var previousPhase = -1;
+    for (var elapsed = 0d; elapsed < 4; elapsed += 1d / 15)
+    {
+        var frame = animator.Update(.8f, true, true, 1d / 15);
+        var phase = (frame - 1) % AudioIconAnimator.PhaseCount;
+        if (previousPhase >= 0 && phase != previousPhase) phaseChanges++;
+        previousPhase = phase;
+    }
+    return (lockedBpm, phaseChanges, tracker.HasEstimate, Math.Abs(tracker.Bpm - lockedBpm) < .001);
 }
 var slowTempo = AnalyzeTempo(80);
 var fastTempo = AnalyzeTempo(160);
@@ -51,6 +59,39 @@ var tempoTrackingWorks = Math.Abs(slowTempo.Bpm - 80) < 8 &&
     fastTempo.Bpm > slowTempo.Bpm * 1.65 &&
     fastTempo.PhaseChanges > slowTempo.PhaseChanges * 1.25 &&
     slowTempo.Locked && fastTempo.Locked && slowTempo.Stable && fastTempo.Stable;
+var representativeWindowWorks = RepresentativeTempoAnalyzer.SelectRepresentativeWindow([.10, .45, .52, .93]) == 2;
+var representativeAudioSampleWorks = false;
+var representativeSampleStart = -1d;
+var representativeSampleBpm = -1d;
+var tempoProbeRoot = Path.Combine(Path.GetTempPath(), $"InnerTuneTempoProbe-{Guid.NewGuid():N}");
+try
+{
+    Directory.CreateDirectory(tempoProbeRoot);
+    var path = Path.Combine(tempoProbeRoot, "representative.wav");
+    const int sampleRate = 16_000;
+    const int durationSeconds = 60;
+    double[] segmentLevels = [.10, .30, .50, .70, .90];
+    using (var writer = new WaveFileWriter(path, WaveFormat.CreateIeeeFloatWaveFormat(sampleRate, 1)))
+    {
+        for (var sample = 0; sample < sampleRate * durationSeconds; sample++)
+        {
+            var seconds = sample / (double)sampleRate;
+            var segment = Math.Min(segmentLevels.Length - 1, (int)(seconds / 12));
+            var beat = seconds % .5 < .08 ? 1 : .02;
+            writer.WriteSample((float)(segmentLevels[segment] * beat * Math.Sin(seconds * Math.PI * 440)));
+        }
+    }
+    var analysis = await RepresentativeTempoAnalyzer.AnalyzeAsync(path);
+    representativeSampleStart = analysis?.SampleStart.TotalSeconds ?? -1;
+    representativeSampleBpm = analysis?.Bpm ?? -1;
+    representativeAudioSampleWorks = analysis is not null &&
+        Math.Abs(analysis.Bpm - 120) < 12 &&
+        analysis.SampleStart.TotalSeconds is >= 23 and <= 25;
+}
+finally
+{
+    if (Directory.Exists(tempoProbeRoot)) Directory.Delete(tempoProbeRoot, true);
+}
 var signal = new SignalGenerator(48_000, 2) { Frequency = 440, Gain = .7, Type = SignalGeneratorType.Sin };
 var meter = new MeteringSampleProvider(signal, 6_000);
 var measuredPeak = 0f;
@@ -115,7 +156,7 @@ finally
 {
     if (Directory.Exists(playbackRoot)) Directory.Delete(playbackRoot, true);
 }
-var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && tempoTrackingWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
+var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks;
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed,
@@ -130,6 +171,10 @@ Console.WriteLine(JsonSerializer.Serialize(new
     fastPhaseChanges = fastTempo.PhaseChanges,
     tempoLocksAfterSample = slowTempo.Locked && fastTempo.Locked,
     tempoRemainsStable = slowTempo.Stable && fastTempo.Stable,
+    representativeWindowWorks,
+    representativeAudioSampleWorks,
+    representativeSampleStart,
+    representativeSampleBpm,
     audioMeterWorks,
     pathMergeWorks,
     installerEnvironmentWorks,

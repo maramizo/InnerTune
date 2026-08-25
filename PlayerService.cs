@@ -16,6 +16,7 @@ public sealed class PlayerService : IDisposable
     private readonly string _audioCache = Path.Combine(AppRuntime.DataDirectory, "audio-cache");
     private readonly Dictionary<string, string> _preparedFiles = new();
     private readonly ConcurrentDictionary<string, Task<string>> _preparations = new();
+    private readonly ConcurrentDictionary<string, double> _tempoCache = new();
     private IReadOnlyList<Track> _queue = [];
     private string[] _queueIds = [];
     private WaveOutEvent? _output;
@@ -27,6 +28,8 @@ public sealed class PlayerService : IDisposable
     private float _volume = .72f;
     private TimeSpan _pendingPosition;
     private CancellationTokenSource? _loadCancel;
+    private CancellationTokenSource? _tempoCancel;
+    private string? _currentSource;
     private readonly ShuffleNavigator _shuffle = new();
     private readonly List<string> _playNextIds = [];
     private bool _shuffleEnabled;
@@ -34,10 +37,23 @@ public sealed class PlayerService : IDisposable
     public event EventHandler? StateChanged;
     public event EventHandler<string>? Failed;
     public event Action<float>? AudioLevelChanged;
+    public event Action<string, double>? TempoEstimated;
     public Track? CurrentTrack => _currentTrack;
     public int CurrentIndex => _index;
     public bool IsPlaying => _playing;
     public bool IsLoading { get; private set; }
+    public bool TempoAnalysisEnabled
+    {
+        get => _tempoAnalysisEnabled;
+        set
+        {
+            if (_tempoAnalysisEnabled == value) return;
+            _tempoAnalysisEnabled = value;
+            if (!value) _tempoCancel?.Cancel();
+            else if (_currentTrack is { } track && _currentSource is { } source) StartTempoAnalysis(track.Id, source);
+        }
+    }
+    private bool _tempoAnalysisEnabled;
     public bool ShuffleEnabled
     {
         get => _shuffleEnabled;
@@ -139,8 +155,12 @@ public sealed class PlayerService : IDisposable
             if (!_preparedFiles.Remove(track.Id, out var source))
                 source = await PrepareAudioAsync(track.Id, _loadCancel.Token);
             _reader = new MediaFoundationReader(source);
+            _currentSource = source;
             _reader.CurrentTime = ClampPosition(_pendingPosition, (int)Math.Ceiling(_reader.TotalTime.TotalSeconds));
-            _meter = new MeteringSampleProvider(_reader.ToSampleProvider(), Math.Max(1, _reader.WaveFormat.SampleRate / 8));
+            const int animationSamplesPerSecond = 15;
+            var samplesPerNotification = Math.Max(1,
+                _reader.WaveFormat.SampleRate * _reader.WaveFormat.Channels / animationSamplesPerSecond);
+            _meter = new MeteringSampleProvider(_reader.ToSampleProvider(), samplesPerNotification);
             _meter.StreamVolume += Meter_StreamVolume;
             _output = new WaveOutEvent { DesiredLatency = 150, NumberOfBuffers = 3, Volume = _volume };
             _output.PlaybackStopped += Output_PlaybackStopped;
@@ -149,6 +169,7 @@ public sealed class PlayerService : IDisposable
             _playing = true;
             StateChanged?.Invoke(this, EventArgs.Empty);
             _ = PrefetchNextAsync();
+            StartTempoAnalysis(track.Id, source);
         }
         catch (OperationCanceledException) { }
         catch (Exception e) { Failed?.Invoke(this, FriendlyPlaybackError(e)); }
@@ -335,6 +356,40 @@ public sealed class PlayerService : IDisposable
         }
     }
 
+    private void StartTempoAnalysis(string trackId, string source)
+    {
+        _tempoCancel?.Cancel();
+        _tempoCancel = null;
+        if (!TempoAnalysisEnabled) return;
+        if (_tempoCache.TryGetValue(trackId, out var cached))
+        {
+            TempoEstimated?.Invoke(trackId, cached);
+            return;
+        }
+        var cancellation = new CancellationTokenSource();
+        _tempoCancel = cancellation;
+        _ = AnalyzeTempoAsync(trackId, source, cancellation);
+    }
+
+    private async Task AnalyzeTempoAsync(string trackId, string source, CancellationTokenSource cancellation)
+    {
+        try
+        {
+            await Task.Delay(750, cancellation.Token);
+            var analysis = await RepresentativeTempoAnalyzer.AnalyzeAsync(source, cancellation.Token);
+            if (analysis is null || cancellation.IsCancellationRequested) return;
+            _tempoCache[trackId] = analysis.Bpm;
+            if (_currentTrack?.Id == trackId) TempoEstimated?.Invoke(trackId, analysis.Bpm);
+        }
+        catch (OperationCanceledException) { }
+        catch { }
+        finally
+        {
+            if (ReferenceEquals(_tempoCancel, cancellation)) _tempoCancel = null;
+            cancellation.Dispose();
+        }
+    }
+
     private void TrimAudioCache()
     {
         try
@@ -358,6 +413,9 @@ public sealed class PlayerService : IDisposable
 
     private void DisposePlayback()
     {
+        _tempoCancel?.Cancel();
+        _tempoCancel = null;
+        _currentSource = null;
         if (_meter is not null)
         {
             _meter.StreamVolume -= Meter_StreamVolume;
