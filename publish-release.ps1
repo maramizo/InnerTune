@@ -16,14 +16,18 @@ $checksum = "$installer.sha256"
 
 $nativeGh = Get-Command gh -ErrorAction SilentlyContinue
 $useWslGh = $false
+$wslTarget = @()
+if ($PSScriptRoot -match '^\\\\wsl(?:\.localhost|\$)\\(?<distribution>[^\\]+)\\home\\(?<user>[^\\]+)\\') {
+    $wslTarget = @('-d', $Matches.distribution, '-u', $Matches.user)
+}
 if (-not $nativeGh -and (Get-Command wsl.exe -ErrorAction SilentlyContinue)) {
-    wsl.exe sh -lc 'command -v gh >/dev/null 2>&1'
+    & wsl.exe @wslTarget sh -lc 'command -v gh >/dev/null 2>&1'
     $useWslGh = $LASTEXITCODE -eq 0
 }
 if (-not $nativeGh -and -not $useWslGh) { throw 'GitHub CLI (gh) is required in Windows or WSL to publish a release.' }
 
 function Invoke-GitHubCli([string[]]$Arguments) {
-    if ($useWslGh) { & wsl.exe gh @Arguments }
+    if ($useWslGh) { & wsl.exe @wslTarget gh @Arguments }
     else { & $nativeGh.Source @Arguments }
 }
 
@@ -40,7 +44,7 @@ $assets = @($installer, $checksum)
 $publishAssets = if ($useWslGh) {
     @($assets | ForEach-Object {
         $portablePath = $_.Replace('\', '/')
-        (wsl.exe wslpath -a $portablePath).Trim()
+        (& wsl.exe @wslTarget wslpath -a $portablePath).Trim()
     })
 } else { $assets }
 
