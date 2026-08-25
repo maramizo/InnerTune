@@ -34,5 +34,15 @@ $startupShortcut.WorkingDirectory = $root
 $startupShortcut.Description = 'Start InnerTune in the Windows notification area'
 $startupShortcut.Save()
 
-Write-Host "Ready. Desktop and startup shortcuts created."
+$protocol = 'HKCU:\Software\Classes\innertune'
+$command = Join-Path $protocol 'shell\open\command'
+New-Item $protocol -Force | Out-Null
+Set-Item $protocol -Value 'URL:InnerTune Playlist Protocol'
+New-ItemProperty $protocol -Name 'URL Protocol' -Value '' -PropertyType String -Force | Out-Null
+New-Item (Join-Path $protocol 'DefaultIcon') -Force | Out-Null
+Set-Item (Join-Path $protocol 'DefaultIcon') -Value "`"$(Join-Path $root 'InnerTune.exe')`",0"
+New-Item $command -Force | Out-Null
+Set-Item $command -Value "`"$(Join-Path $root 'InnerTune.exe')`" `"%1`""
+
+Write-Host "Ready. Desktop/startup shortcuts and innertune:// playlist links are configured."
 if ($Launch) { Start-Process (Join-Path $root 'InnerTune.exe') }

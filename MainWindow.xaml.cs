@@ -71,6 +71,7 @@ public partial class MainWindow : Window
     private TimeSpan _videoNaturalDuration;
     private bool _checkingUpdates;
     private string? _offeredUpdateTag;
+    private string? _pendingActivation;
 
     public MainWindow()
     {
@@ -126,6 +127,11 @@ public partial class MainWindow : Window
         MarkPlaybackDirty();
         _playbackSaveTimer.Start();
         SetMode("home");
+        if (_pendingActivation is { } activation)
+        {
+            _pendingActivation = null;
+            HandleActivation(activation);
+        }
         if (!AppRuntime.IsTestMode)
         {
             _updateTimer.Start();
@@ -160,6 +166,25 @@ public partial class MainWindow : Window
         if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
         Activate();
         Topmost = true; Topmost = _mini || _pinned;
+    }
+
+    public void HandleActivation(string? activation)
+    {
+        if (_mini) ToggleMini();
+        ShowAndActivate();
+        if (AppRuntime.IsTestMode && activation == AppRuntime.TestShareActivation)
+        {
+            if (!_settingsLoaded) _pendingActivation = activation;
+            else ShareQueue_Click(ShareQueueButton, new RoutedEventArgs());
+            return;
+        }
+        if (!PlaylistShareCodec.IsPlaylistLink(activation)) return;
+        if (!_settingsLoaded)
+        {
+            _pendingActivation = activation;
+            return;
+        }
+        _ = ImportSharedPlaylistAsync(activation!);
     }
 
     private async Task CheckForUpdatesAsync(bool userInitiated)
@@ -1425,6 +1450,85 @@ public partial class MainWindow : Window
         if (existing is null) _library.SavedQueues.Add(new() { Name = name, FolderId = folder?.Id, Tracks = _library.Queue.ToList() });
         else { existing.Tracks = _library.Queue.ToList(); existing.UpdatedAt = DateTimeOffset.Now; }
         await SaveAsync(); SetStatus($"Saved queue “{name}”");
+    }
+
+    private void ShareQueue_Click(object sender, RoutedEventArgs e)
+    {
+        if (AppRuntime.IsTestMode) AppRuntime.TestLog($"automation share queue count={_library.Queue.Count}");
+        if (_library.Queue.Count == 0) return;
+        var suggested = string.IsNullOrWhiteSpace(_library.QueueSourceName) ||
+                        _library.QueueSourceName.Equals("Current queue", StringComparison.OrdinalIgnoreCase)
+            ? "Shared playlist"
+            : _library.QueueSourceName.Split('/').Last().Trim();
+        var name = PromptDialog.Show(this, "Share playlist", "Playlist name", suggested, "Copy link");
+        if (string.IsNullOrWhiteSpace(name)) return;
+        CopyPlaylistLink(name, _library.Queue);
+    }
+
+    private void ShareSaved_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is not SavedQueue saved) return;
+        CopyPlaylistLink(saved.Name, saved.Tracks);
+    }
+
+    private void CopyPlaylistLink(string name, IEnumerable<Track> tracks)
+    {
+        try
+        {
+            var link = PlaylistShareCodec.Encode(name, tracks);
+            ClipboardService.SetText(link);
+            SetStatus($"Copied link for “{name}”");
+        }
+        catch (Exception error) { SetStatus(error.Message, true); }
+    }
+
+    private async void ImportPlaylist_Click(object sender, RoutedEventArgs e)
+    {
+        var initial = "";
+        var clipboard = ClipboardService.GetText()?.Trim();
+        if (PlaylistShareCodec.IsPlaylistLink(clipboard)) initial = clipboard!;
+        var link = PromptDialog.Show(this, "Import playlist", "Paste an InnerTune playlist link", initial, "Import");
+        if (string.IsNullOrWhiteSpace(link)) return;
+        await ImportSharedPlaylistAsync(link);
+    }
+
+    private async Task ImportSharedPlaylistAsync(string link)
+    {
+        try
+        {
+            var shared = PlaylistShareCodec.Decode(link);
+            var confirmed = ConfirmDialog.Show(this, "Import shared playlist",
+                $"Save “{shared.Name}”?",
+                $"{shared.Tracks.Count} {(shared.Tracks.Count == 1 ? "song" : "songs")} will be added to Saved queues. Your current queue and playback will not change.",
+                "Save playlist");
+            if (!confirmed) return;
+
+            var duplicate = _library.SavedQueues.FirstOrDefault(saved =>
+                saved.Name.Equals(shared.Name, StringComparison.OrdinalIgnoreCase) &&
+                saved.Tracks.Select(track => track.Id).SequenceEqual(shared.Tracks.Select(track => track.Id)));
+            if (duplicate is not null)
+            {
+                LibraryTabs.SelectedIndex = 1;
+                LibraryHeading.Text = "Saved queues";
+                LibraryDescription.Text = "Queues you can return to whenever you want.";
+                SetMode("library");
+                SetStatus($"“{shared.Name}” is already saved");
+                return;
+            }
+
+            var name = shared.Name;
+            for (var suffix = 2; _library.SavedQueues.Any(saved =>
+                     saved.FolderId is null && saved.Name.Equals(name, StringComparison.OrdinalIgnoreCase)); suffix++)
+                name = $"{shared.Name} ({suffix})";
+            _library.SavedQueues.Add(new SavedQueue { Name = name, Tracks = shared.Tracks.ToList() });
+            await SaveAsync();
+            LibraryTabs.SelectedIndex = 1;
+            LibraryHeading.Text = "Saved queues";
+            LibraryDescription.Text = "Queues you can return to whenever you want.";
+            SetMode("library");
+            SetStatus($"Saved shared playlist “{name}”");
+        }
+        catch (Exception error) { SetStatus($"Couldn’t import playlist: {error.Message}", true); }
     }
 
     private LibraryFolder? EnsureFolder(string path)

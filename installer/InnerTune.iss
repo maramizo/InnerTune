@@ -7,7 +7,7 @@
 #endif
 
 #define AppName "InnerTune"
-#define AppVersion "1.1.4"
+#define AppVersion "1.1.5"
 #define AppPublisher "InnerTune"
 #define AppExeName "InnerTune.exe"
 
@@ -36,6 +36,7 @@ WizardStyle=modern
 CloseApplications=yes
 CloseApplicationsFilter={#AppExeName}
 RestartApplications=yes
+ChangesAssociations=yes
 UsedUserAreasWarning=no
 
 [Tasks]
@@ -53,6 +54,12 @@ Type: filesandordirs; Name: "{app}\provider\node_modules"
 Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"
 Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; Tasks: desktopicon
 Name: "{userstartup}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; Tasks: startupicon
+
+[Registry]
+Root: HKCU; Subkey: "Software\Classes\innertune"; ValueType: string; ValueName: ""; ValueData: "URL:InnerTune Playlist Protocol"; Flags: uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\innertune"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\innertune\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#AppExeName},0"
+Root: HKCU; Subkey: "Software\Classes\innertune\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"" ""%1"""
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName}"; Flags: nowait postinstall

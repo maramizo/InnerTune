@@ -1,3 +1,4 @@
+using System.IO;
 using System.IO.Pipes;
 using System.Text;
 using System.Windows;
@@ -6,6 +7,7 @@ namespace InnerTune;
 
 public partial class App : System.Windows.Application
 {
+    private const int MaxActivationBytes = 32_768;
     private Mutex? _mutex;
     private bool _ownsMutex;
     private CancellationTokenSource? _activationCancel;
@@ -18,6 +20,9 @@ public partial class App : System.Windows.Application
             return;
         }
 
+        var activation = e.Args.FirstOrDefault(argument =>
+            PlaylistShareCodec.IsPlaylistLink(argument) ||
+            (AppRuntime.IsTestMode && argument.Equals(AppRuntime.TestShareActivation, StringComparison.Ordinal))) ?? "show";
         var instanceName = $"InnerTune.Windows.Singleton.{AppRuntime.InstanceKey}";
         _mutex = new Mutex(true, instanceName, out var isFirst);
         _ownsMutex = isFirst;
@@ -27,7 +32,8 @@ public partial class App : System.Windows.Application
             {
                 using var client = new NamedPipeClientStream(".", $"InnerTune.Activate.{AppRuntime.InstanceKey}", PipeDirection.Out);
                 client.Connect(800);
-                client.Write(Encoding.UTF8.GetBytes("show"));
+                var bytes = Encoding.UTF8.GetBytes(activation);
+                if (bytes.Length <= MaxActivationBytes) client.Write(bytes);
             }
             catch { }
             Shutdown();
@@ -47,6 +53,7 @@ public partial class App : System.Windows.Application
             window.Top = -32000;
         }
         window.Show();
+        if (activation != "show") window.HandleActivation(activation);
         _activationCancel = new CancellationTokenSource();
         _ = ListenForActivationAsync(window, _activationCancel.Token);
     }
@@ -60,9 +67,16 @@ public partial class App : System.Windows.Application
                 await using var server = new NamedPipeServerStream($"InnerTune.Activate.{AppRuntime.InstanceKey}", PipeDirection.In, 1,
                     PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
                 await server.WaitForConnectionAsync(token);
-                var buffer = new byte[32];
-                _ = await server.ReadAsync(buffer, token);
-                await window.Dispatcher.InvokeAsync(window.ShowAndActivate);
+                using var message = new MemoryStream();
+                var buffer = new byte[4096];
+                int read;
+                while ((read = await server.ReadAsync(buffer, token)) > 0)
+                {
+                    if (message.Length + read > MaxActivationBytes) throw new InvalidDataException("Activation message is too large.");
+                    message.Write(buffer, 0, read);
+                }
+                var activation = Encoding.UTF8.GetString(message.ToArray());
+                await window.Dispatcher.InvokeAsync(() => window.HandleActivation(activation));
             }
             catch (OperationCanceledException) { return; }
             catch { await Task.Delay(250, token); }

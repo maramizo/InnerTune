@@ -270,14 +270,16 @@
                 </TabItem>
                 <TabItem Header="Saved queues">
                   <Grid>
-                  <StackPanel x:Name="SavedQueuesEmpty" VerticalAlignment="Center" Margin="0,0,0,60"><TextBlock Text="No saved queues yet" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Use Save above the queue when you want to keep one." Foreground="{StaticResource TextMuted}" Margin="0,7,0,0" HorizontalAlignment="Center"/></StackPanel>
-                  <ListBox x:Name="SavedQueueList" Margin="0,12,0,0">
+                  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                  <Button Content="Import link" HorizontalAlignment="Right" Background="Transparent" Padding="12,5" Margin="0,0,5,4" Click="ImportPlaylist_Click"/>
+                  <StackPanel x:Name="SavedQueuesEmpty" Grid.Row="1" VerticalAlignment="Center" Margin="0,0,0,60"><TextBlock Text="No saved queues yet" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center"/><TextBlock Text="Save a queue or import an InnerTune playlist link." Foreground="{StaticResource TextMuted}" Margin="0,7,0,0" HorizontalAlignment="Center"/></StackPanel>
+                  <ListBox x:Name="SavedQueueList" Grid.Row="1" Margin="0,6,0,0">
                     <ListBox.ItemTemplate><DataTemplate>
                       <Grid Margin="5,3">
                         <Grid.RowDefinitions><RowDefinition Height="58"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                         <Border Background="#19191E" CornerRadius="12"/>
                         <Grid>
-                          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="64"/><ColumnDefinition Width="72"/></Grid.ColumnDefinitions>
+                          <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="64"/><ColumnDefinition Width="64"/><ColumnDefinition Width="72"/></Grid.ColumnDefinitions>
                           <ToggleButton x:Name="SavedQueueToggle" HorizontalContentAlignment="Stretch" Background="Transparent" BorderThickness="0" Foreground="{StaticResource TextPrimary}" Cursor="Hand">
                             <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
                               <Border x:Name="QueueHeader" Background="Transparent" CornerRadius="12" Padding="9,0">
@@ -296,7 +298,8 @@
                             </ToggleButton.Template>
                           </ToggleButton>
                           <Button Grid.Column="1" Content="Load" Margin="4" Padding="11,5" Click="LoadSaved_Click"/>
-                          <Button Grid.Column="2" Content="Delete" Background="Transparent" Margin="4" Padding="9,5" Click="DeleteSaved_Click"/>
+                          <Button Grid.Column="2" Content="Share" Background="Transparent" Margin="4" Padding="9,5" Click="ShareSaved_Click"/>
+                          <Button Grid.Column="3" Content="Delete" Background="Transparent" Margin="4" Padding="9,5" Click="DeleteSaved_Click"/>
                         </Grid>
                         <Border x:Name="SavedQueueSongs" Grid.Row="1" Visibility="Collapsed" Margin="12,2,12,8" Padding="7" Background="#141419" CornerRadius="0,0,11,11">
                           <ListBox ItemsSource="{Binding Tracks}" MaxHeight="360" ScrollViewer.VerticalScrollBarVisibility="Auto">
@@ -403,6 +406,7 @@
                 <StackPanel><TextBlock Text="Up next" FontSize="21" FontWeight="Bold"/><TextBlock x:Name="QueueCountText" Text="0 songs" Foreground="{StaticResource TextMuted}" FontSize="10" Margin="0,4,0,0"/></StackPanel>
                 <StackPanel x:Name="QueueActions" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                   <Button x:Name="SaveQueueButton" Content="Save" Padding="12,5" Margin="0,0,5,0" Click="SaveQueue_Click"/>
+                  <Button x:Name="ShareQueueButton" Content="Share" Background="Transparent" Padding="10,5" Margin="0,0,3,0" Click="ShareQueue_Click"/>
                   <Button x:Name="ClearQueueButton" Content="Clear" Background="Transparent" Padding="10,5" Click="ClearQueue_Click"/>
                 </StackPanel>
               </Grid>

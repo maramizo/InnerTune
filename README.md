@@ -21,11 +21,14 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 - Double-click a queued song to play it.
 - Use **×** on a queue row to remove it.
 - Save queues with paths such as `Focus/Night`; the folders are created automatically.
+- **Share** copies a compact `innertune://playlist/...` link. Opening the link in Windows previews and saves the named playlist without replacing the current queue; **Import link** under Saved queues is available for manual pasting.
 - Press `:` outside a text field to open Luna. Search appears again only when you select Search.
 - Use **Mini player** for the compact always-on-top widget.
 - Closing the window hides it to the notification area; use the tray menu to exit.
 
 Library state is stored locally at `%LOCALAPPDATA%\InnerTune\library.json`.
+
+Shared links contain the playlist name and playable track metadata only. They do not contain account data, local paths, favorites, listening history, or playback state.
 
 ## Isolated UI tests
 
