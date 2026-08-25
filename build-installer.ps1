@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$version = '1.1.9'
+$version = '1.1.10'
 $staging = Join-Path $env:TEMP "InnerTune-Installer-$version"
 $payload = Join-Path $staging 'payload'
 $installerScript = Join-Path $PSScriptRoot 'installer\InnerTune.iss'
@@ -26,6 +26,7 @@ dotnet publish "$PSScriptRoot\InnerTune.Windows.csproj" `
     -c $Configuration -r win-x64 --self-contained true -o $payload
 
 Copy-Item "$PSScriptRoot\README.md" $payload -Force
+Copy-Item "$PSScriptRoot\Assets\InnerTune.ico" (Join-Path $payload "InnerTune-$version.ico") -Force
 
 $provider = Join-Path $payload 'provider'
 Push-Location $provider

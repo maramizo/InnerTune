@@ -40,6 +40,7 @@ public partial class MainWindow : Window
     private BitmapSource[]? _djIconFrames;
     private System.Drawing.Icon[]? _djTrayFrames;
     private int _activeDjFrame = -1;
+    private int _djIconPulse;
     private DateTime _lastIconFrameAt;
     private int _iconUpdateQueued;
     private float _pendingAudioLevel;
@@ -471,6 +472,7 @@ public partial class MainWindow : Window
             var source = ResolveAppIcon(icon);
             Icon = source;
             TitleLogo.Source = source;
+            _windowsMedia?.SetAudioIconFrame(0, false);
             _activeDjFrame = icon == "dj-cat" ? 0 : -1;
             CustomIconPreview.Source = File.Exists(_library.Settings.CustomIconPath) ? LoadBitmap(_library.Settings.CustomIconPath!, 128) : null;
             DjCatIconChoice.IsChecked = icon == "dj-cat";
@@ -612,7 +614,7 @@ public partial class MainWindow : Window
             SetDjFrame(0);
             return;
         }
-        var frame = AudioIconFrameSelector.Select(level, PlaybackIsPlaying, _library.Settings.AnimatedIconEnabled);
+        var frame = AudioIconFrameSelector.SelectAnimated(level, PlaybackIsPlaying, _library.Settings.AnimatedIconEnabled, _djIconPulse++);
         if (!PlaybackIsPlaying || !_library.Settings.AnimatedIconEnabled)
         {
             SetDjFrame(0);
@@ -637,6 +639,8 @@ public partial class MainWindow : Window
 
     private void SetDjFrame(int frame)
     {
+        var animate = _library.Settings.Icon == "dj-cat" && _library.Settings.AnimatedIconEnabled && PlaybackIsPlaying;
+        _windowsMedia?.SetAudioIconFrame(frame, animate);
         if (_library.Settings.Icon != "dj-cat" || _activeDjFrame == frame) return;
         var frames = GetDjIconFrames();
         frame = Math.Clamp(frame, 0, frames.Length - 1);

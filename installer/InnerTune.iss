@@ -7,7 +7,7 @@
 #endif
 
 #define AppName "InnerTune"
-#define AppVersion "1.1.9"
+#define AppVersion "1.1.10"
 #define AppPublisher "InnerTune"
 #define AppExeName "InnerTune.exe"
 
@@ -51,9 +51,9 @@ Type: files; Name: "{app}\setup.ps1"
 Type: filesandordirs; Name: "{app}\provider\node_modules"
 
 [Icons]
-Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"
-Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; Tasks: desktopicon
-Name: "{userstartup}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppExeName}"; Tasks: startupicon
+Name: "{autoprograms}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\InnerTune-{#AppVersion}.ico"
+Name: "{autodesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\InnerTune-{#AppVersion}.ico"; Tasks: desktopicon
+Name: "{userstartup}\{#AppName}"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\InnerTune-{#AppVersion}.ico"; Tasks: startupicon
 
 [Registry]
 Root: HKCU; Subkey: "Software\Classes\innertune"; ValueType: string; ValueName: ""; ValueData: "URL:InnerTune Playlist Protocol"; Flags: uninsdeletekey

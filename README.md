@@ -24,7 +24,7 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 - **Share** copies a compact `innertune://playlist/...` link. Opening the link in Windows previews and saves the named playlist without replacing the current queue; **Import link** under Saved queues is available for manual pasting.
 - Press `:` outside a text field to open Luna. Search appears again only when you select Search.
 - Use **Mini player** for the compact always-on-top widget.
-- Hover InnerTune on the Windows taskbar for Previous, Play/Pause, and Next; the taskbar icon also shows playback progress.
+- Hover InnerTune on the Windows taskbar for Previous, Play/Pause, and Next; the taskbar icon shows playback progress plus an audio-reactive equalizer badge when the animated DJ Cat is enabled.
 - Windows media keys and system media controls show the current title, artist, album, artwork, timeline, and transport controls.
 - **Settings** includes Midnight, Graphite, and OLED themes; DJ Cat, Minimal, and custom local icons; an audio-reactive animated DJ Cat toggle; and an opt-in playback resume setting. Automatic playback on startup is off by default.
 - The active saved queue is outlined and marked **Playing**. Editing the current queue removes that source marker.
