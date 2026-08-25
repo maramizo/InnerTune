@@ -7,7 +7,7 @@
 #endif
 
 #define AppName "InnerTune"
-#define AppVersion "1.1.1"
+#define AppVersion "1.1.2"
 #define AppPublisher "InnerTune"
 #define AppExeName "InnerTune.exe"
 
@@ -35,7 +35,7 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
 CloseApplicationsFilter={#AppExeName}
-RestartApplications=no
+RestartApplications=yes
 UsedUserAreasWarning=no
 
 [Tasks]
