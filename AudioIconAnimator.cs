@@ -50,9 +50,10 @@ public sealed class AudioIconAnimator
         var normalized = Math.Clamp(_envelope / _reference, 0, 1);
         var audible = Math.Clamp(input / .045f, 0, 1);
         var energy = Math.Clamp(MathF.Sqrt(normalized) * (.35f + .65f * audible), 0, 1);
-        _pendingAmplitudeLevel = input < .004f && _envelope < .012f
+        var measuredAmplitudeLevel = input < .004f && _envelope < .012f
             ? 0
             : Math.Clamp((int)MathF.Round(energy * (LevelCount - 1)), 1, LevelCount - 1);
+        if (!_activeJump) _pendingAmplitudeLevel = measuredAmplitudeLevel;
 
         _sustainedLoudness += (input - _sustainedLoudness) * TimeAdjustedBlend(input > _sustainedLoudness ? .18 : .08, baselineTicks);
         var fullnessRange = Math.Max(.025f, _fullnessCeiling - _fullnessFloor);
@@ -94,7 +95,8 @@ public sealed class AudioIconAnimator
                 else
                 {
                     _jumpEndedMarker = jumpMarker;
-                    _activeAmplitudeLevel = _pendingAmplitudeLevel;
+                    _pendingAmplitudeLevel = measuredAmplitudeLevel;
+                    _activeAmplitudeLevel = measuredAmplitudeLevel;
                     _lastStrengthMarker = strengthMarker;
                 }
             }

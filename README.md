@@ -26,7 +26,7 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 - **Share** copies a compact `innertune://playlist/...` link. Opening the link in Windows previews and saves the named playlist without replacing the current queue; **Import link** under Saved queues is available for manual pasting.
 - Press `:` outside a text field to open Luna. Search appears again only when you select Search.
 - Use **Mini player** for the compact always-on-top widget.
-- Hover InnerTune on the Windows taskbar for Previous, Play/Pause, and Next. The same animated DJ Cat appears in the title, tray, and mini-player using 24 procedural motion phases on an independent 30 Hz render clock. Its grounded pose alternates one raised paw and one paw on the deck; airborne jumps lock both paws overhead. Hand intensity changes only at crossover markers, and jumps begin and end only at grounded markers. A low-priority, one-time analysis builds and caches the jump timeline before each section plays: fullness is normalized between the song's 20th- and 95th-percentile RMS levels, brief beat-scale dips may be bridged, and every section shorter than five seconds is discarded. The animator follows that timeline by playback timestamp and enforces a five-second minimum jump clip. Delayed Windows ticks catch up to musical time.
+- Hover InnerTune on the Windows taskbar for Previous, Play/Pause, and Next. The same animated DJ Cat appears in the title, tray, and mini-player using 24 procedural motion phases on an independent 30 Hz render clock. Its grounded pose alternates one raised paw and one paw on the deck; airborne jumps lock both paws overhead and ignore live-volume changes until landing. A low-priority, one-time analysis combines normalized fullness, rhythmic style, spectral transitions, and repeated musical sections to plan chorus-like jumps of at least five seconds. The animator follows that cached timeline by playback timestamp, while delayed Windows ticks catch up to musical time.
 - Windows media keys and system media controls show the current title, artist, album, artwork, timeline, and transport controls.
 - **Settings** includes Midnight, Graphite, and OLED themes; DJ Cat, Minimal, and custom local icons; an audio-reactive animated DJ Cat toggle; and an opt-in playback resume setting. Automatic playback on startup is off by default.
 - The active saved queue is outlined and marked **Playing**. Editing the current queue removes that source marker.
@@ -82,6 +82,13 @@ Apply standard .NET formatting with `dotnet format InnerTune.Windows.csproj`. Be
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\diagnostics\format-check.ps1
+```
+
+The deterministic motion tuner evaluates the production planner against actual cached audio, enforces zero movement across its grounded instrumental controls, and uses differential evolution to solve the eleven chorus-detection parameters. It reports the selected point and the precision/recall Pareto frontier as JSON:
+
+```powershell
+dotnet run --project .\diagnostics\MotionTuningProbe\MotionTuningProbe.csproj -c Release -- `
+  --population 36 --generations 22
 ```
 
 ## Publish a release locally

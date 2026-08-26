@@ -1,3 +1,4 @@
+using NAudio.Dsp;
 using NAudio.Wave;
 
 namespace InnerTune;
@@ -27,6 +28,18 @@ public sealed record DanceMetrics(
     double TransientStrength,
     double TempoFit);
 
+public sealed record MotionPlanningInput(
+    double Bpm,
+    TimeSpan SampleStart,
+    double SampleLoudness,
+    double AverageLoudness,
+    double PeakLoudness,
+    double FullnessFloor,
+    double FullnessCeiling,
+    DanceMetrics DanceMetrics,
+    List<float> Envelope,
+    List<SpectralFrame> SpectralFrames);
+
 public static class RepresentativeTempoAnalyzer
 {
     private const double EnvelopeSeconds = .125;
@@ -49,6 +62,22 @@ public static class RepresentativeTempoAnalyzer
         }
     }, token);
 
+    public static Task<MotionPlanningInput?> PrepareMotionPlanningAsync(string path,
+        CancellationToken token = default) => Task.Run(() =>
+    {
+        var thread = Thread.CurrentThread;
+        var previousPriority = thread.Priority;
+        try
+        {
+            thread.Priority = ThreadPriority.BelowNormal;
+            return PrepareMotionPlanning(path, token);
+        }
+        finally
+        {
+            try { thread.Priority = previousPriority; } catch { }
+        }
+    }, token);
+
     public static int SelectRepresentativeWindow(IReadOnlyList<double> loudness)
     {
         if (loudness.Count == 0) return -1;
@@ -58,6 +87,25 @@ public static class RepresentativeTempoAnalyzer
     }
 
     private static TempoAnalysis? Analyze(string path, CancellationToken token)
+    {
+        var prepared = PrepareMotionPlanning(path, token);
+        if (prepared is null) return null;
+        var jumpWindows = JumpWindowPlanner.Plan(prepared.Envelope, EnvelopeSeconds,
+            prepared.FullnessFloor, prepared.FullnessCeiling, prepared.DanceMetrics, prepared.SpectralFrames);
+        return new TempoAnalysis(
+            prepared.Bpm,
+            prepared.SampleStart,
+            prepared.SampleLoudness,
+            prepared.AverageLoudness,
+            prepared.PeakLoudness,
+            prepared.FullnessFloor,
+            prepared.FullnessCeiling,
+            jumpWindows,
+            prepared.DanceMetrics.Score,
+            prepared.DanceMetrics);
+    }
+
+    private static MotionPlanningInput? PrepareMotionPlanning(string path, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
         using var reader = new MediaFoundationReader(path);
@@ -96,18 +144,16 @@ public static class RepresentativeTempoAnalyzer
         if (!tracker.HasEstimate) return null;
         var danceMetrics = MeasureDanceability(tempoFeatures.Full, tempoFeatures.Low, tracker.Bpm);
         reader.CurrentTime = TimeSpan.Zero;
-        var motionFeatures = ReadEnvelope(samples, reader.WaveFormat, duration, token);
+        var motionFeatures = ReadEnvelope(samples, reader.WaveFormat, duration, token, true);
         fullnessSamples.AddRange(motionFeatures.Full);
         var fullnessFloor = Percentile(fullnessSamples, .20);
         var fullnessCeiling = Percentile(fullnessSamples, .95);
         if (fullnessCeiling - fullnessFloor < .025)
             fullnessCeiling = Math.Min(1, fullnessFloor + .025);
-        var jumpWindows = JumpWindowPlanner.Plan(motionFeatures.Full, EnvelopeSeconds,
-            fullnessFloor, fullnessCeiling, danceMetrics);
         var peakLoudness = Math.Max(
             sampledPeaks.Count == 0 ? 0 : sampledPeaks.Max(),
             tempoFeatures.Full.Count == 0 ? 0 : tempoFeatures.Full.Max());
-        return new TempoAnalysis(
+        return new MotionPlanningInput(
             tracker.Bpm,
             TimeSpan.FromSeconds(sampleStart),
             loudness[selected],
@@ -115,9 +161,9 @@ public static class RepresentativeTempoAnalyzer
             peakLoudness,
             fullnessFloor,
             fullnessCeiling,
-            jumpWindows,
-            danceMetrics.Score,
-            danceMetrics);
+            danceMetrics,
+            motionFeatures.Full,
+            motionFeatures.Spectral);
     }
 
     public static double EstimateDanceability(
@@ -231,9 +277,10 @@ public static class RepresentativeTempoAnalyzer
         return sorted[lower] + (sorted[upper] - sorted[lower]) * fraction;
     }
 
-    private sealed record EnvelopeFeatures(List<float> Full, List<float> Low);
+    private sealed record EnvelopeFeatures(List<float> Full, List<float> Low, List<SpectralFrame> Spectral);
 
-    private static EnvelopeFeatures ReadEnvelope(ISampleProvider samples, WaveFormat format, double seconds, CancellationToken token)
+    private static EnvelopeFeatures ReadEnvelope(ISampleProvider samples, WaveFormat format, double seconds,
+        CancellationToken token, bool captureSpectral = false)
     {
         var samplesPerBucket = Math.Max(format.Channels, (int)Math.Round(format.SampleRate * format.Channels * EnvelopeSeconds));
         var requestedBuckets = Math.Max(1, (int)Math.Ceiling(seconds / EnvelopeSeconds));
@@ -241,6 +288,7 @@ public static class RepresentativeTempoAnalyzer
         var fullEnvelope = new List<float>(requestedBuckets);
         var lowEnvelope = new List<float>(requestedBuckets);
         var lowState = new double[Math.Max(1, format.Channels)];
+        var spectral = captureSpectral ? new SpectralAccumulator(format.SampleRate) : null;
         var lowPassAlpha = 1 - Math.Exp(-2 * Math.PI * 180 / format.SampleRate);
         double squareSum = 0, lowSquareSum = 0;
         var bucketSamples = 0;
@@ -253,6 +301,7 @@ public static class RepresentativeTempoAnalyzer
             {
                 var sample = buffer[index];
                 var channel = (bucketSamples + index) % lowState.Length;
+                if (channel == 0) spectral?.Add(sample);
                 lowState[channel] += lowPassAlpha * (sample - lowState[channel]);
                 squareSum += sample * sample;
                 lowSquareSum += lowState[channel] * lowState[channel];
@@ -270,6 +319,82 @@ public static class RepresentativeTempoAnalyzer
             fullEnvelope.Add((float)Math.Sqrt(squareSum / bucketSamples));
             lowEnvelope.Add((float)Math.Sqrt(lowSquareSum / bucketSamples));
         }
-        return new EnvelopeFeatures(fullEnvelope, lowEnvelope);
+        spectral?.Complete();
+        return new EnvelopeFeatures(fullEnvelope, lowEnvelope, spectral?.Frames ?? []);
+    }
+
+    private sealed class SpectralAccumulator
+    {
+        private const int FftSize = 2048;
+        private const int FftPower = 11;
+        private const int BandCount = 13;
+        private readonly int _sampleRate;
+        private readonly int _decimation;
+        private readonly double _effectiveSampleRate;
+        private readonly Complex[] _fft = new Complex[FftSize];
+        private readonly double[] _bandTotals = new double[BandCount];
+        private readonly (int Start, int End)[] _bands = new (int, int)[BandCount];
+        private int _monoSamples;
+        private int _fftSamples;
+        private int _fftCount;
+
+        public List<SpectralFrame> Frames { get; } = [];
+
+        public SpectralAccumulator(int sampleRate)
+        {
+            _sampleRate = sampleRate;
+            _decimation = Math.Max(1, (int)Math.Round(sampleRate / 11_025d));
+            _effectiveSampleRate = sampleRate / (double)_decimation;
+            var edges = Enumerable.Range(0, BandCount + 1)
+                .Select(index => 55 * Math.Pow(5000d / 55, index / (double)BandCount))
+                .ToArray();
+            for (var band = 0; band < BandCount; band++)
+                _bands[band] = (
+                    Math.Max(1, (int)Math.Ceiling(edges[band] * FftSize / _effectiveSampleRate)),
+                    Math.Min(FftSize / 2, (int)Math.Floor(edges[band + 1] * FftSize / _effectiveSampleRate)));
+        }
+
+        public void Add(float sample)
+        {
+            if (_monoSamples % _decimation == 0)
+            {
+                var window = .5 - .5 * Math.Cos(2 * Math.PI * _fftSamples / (FftSize - 1));
+                _fft[_fftSamples++] = new Complex { X = (float)(sample * window) };
+                if (_fftSamples == FftSize) ProcessFft();
+            }
+            _monoSamples++;
+            if (_monoSamples % _sampleRate == 0) EmitFrame();
+        }
+
+        public void Complete()
+        {
+            if (_monoSamples % _sampleRate != 0) EmitFrame();
+        }
+
+        private void ProcessFft()
+        {
+            while (_fftSamples < FftSize) _fft[_fftSamples++] = default;
+            FastFourierTransform.FFT(true, FftPower, _fft);
+            for (var band = 0; band < BandCount; band++)
+            {
+                var (start, end) = _bands[band];
+                double total = 0;
+                for (var bin = start; bin <= end; bin++)
+                    total += _fft[bin].X * _fft[bin].X + _fft[bin].Y * _fft[bin].Y;
+                _bandTotals[band] += Math.Log(total / Math.Max(1, end - start + 1) + 1e-12);
+            }
+            _fftCount++;
+            Array.Clear(_fft);
+            _fftSamples = 0;
+        }
+
+        private void EmitFrame()
+        {
+            if (_fftSamples > 0) ProcessFft();
+            if (_fftCount == 0) return;
+            Frames.Add(new SpectralFrame(_bandTotals.Select(total => total / _fftCount).ToArray()));
+            Array.Clear(_bandTotals);
+            _fftCount = 0;
+        }
     }
 }

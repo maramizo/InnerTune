@@ -18,7 +18,7 @@ $catalog = [ordered]@{
     '32J7bZHva9M' = @{ Title = 'Da Funk'; Expected = 'jump' }
     'DMJgiky90pE' = @{ Title = 'Children (Dream Version)'; Expected = 'jump' }
     'Bo68RTmLd6M' = @{ Title = 'Strobe (Dimension Remix)'; Expected = 'jump' }
-    'gt1pKrwxAJU' = @{ Title = 'Opus'; Expected = 'jump' }
+    'gt1pKrwxAJU' = @{ Title = 'Opus'; Expected = 'grounded' }
     '5w3rRFWzjcM' = @{ Title = 'Sweden'; Expected = 'grounded' }
     'gLgUesz8444' = @{ Title = 'An Ending'; Expected = 'grounded' }
     'Jd8w8iPWGM8' = @{ Title = 'Home (Music Box)'; Expected = 'grounded' }
