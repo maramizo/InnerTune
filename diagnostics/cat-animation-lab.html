@@ -1,0 +1,888 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>InnerTune · DJ Cat Motion Lab</title>
+        <link
+            rel="icon"
+            href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath fill='%23ff4fa3' d='M5 13 7 3l7 6h4l7-6 2 10v8c0 6-5 9-11 9S5 27 5 21z'/%3E%3Ccircle cx='11' cy='17' r='2'/%3E%3Ccircle cx='21' cy='17' r='2'/%3E%3Cpath d='m13 22 3 2 3-2' fill='none' stroke='%2309090c' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"
+        />
+        <style>
+            :root {
+                color-scheme: dark;
+                --bg: #09090c;
+                --panel: #121218;
+                --panel-2: #181820;
+                --line: #292934;
+                --text: #f6f3fa;
+                --muted: #a6a2af;
+                --pink: #ff4fa3;
+                --violet: #9b6cff;
+                --mint: #83f6c5;
+                --energy: 0.72;
+                font-family:
+                    "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+            }
+
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                min-height: 100vh;
+                color: var(--text);
+                background:
+                    radial-gradient(
+                        circle at 12% -10%,
+                        rgba(155, 108, 255, 0.18),
+                        transparent 34rem
+                    ),
+                    radial-gradient(
+                        circle at 92% 8%,
+                        rgba(255, 79, 163, 0.12),
+                        transparent 30rem
+                    ),
+                    var(--bg);
+            }
+
+            button,
+            input {
+                font: inherit;
+            }
+            button {
+                color: inherit;
+            }
+
+            .shell {
+                width: min(1500px, calc(100% - 40px));
+                margin: 0 auto;
+                padding: 34px 0 56px;
+            }
+            .hero {
+                display: flex;
+                align-items: end;
+                justify-content: space-between;
+                gap: 30px;
+                margin-bottom: 26px;
+            }
+            .eyebrow {
+                color: var(--pink);
+                font-size: 12px;
+                font-weight: 750;
+                letter-spacing: 0.18em;
+                text-transform: uppercase;
+            }
+            h1 {
+                margin: 8px 0 8px;
+                font-size: clamp(32px, 5vw, 58px);
+                line-height: 0.98;
+                letter-spacing: -0.055em;
+            }
+            .intro {
+                max-width: 700px;
+                margin: 0;
+                color: var(--muted);
+                font-size: 15px;
+                line-height: 1.6;
+            }
+            .status-pill {
+                flex: 0 0 auto;
+                display: flex;
+                gap: 9px;
+                align-items: center;
+                padding: 9px 12px;
+                color: #d8d4df;
+                background: rgba(20, 20, 27, 0.82);
+                border: 1px solid var(--line);
+                border-radius: 999px;
+                font-size: 12px;
+            }
+            .status-dot {
+                width: 7px;
+                height: 7px;
+                border-radius: 50%;
+                background: var(--mint);
+                box-shadow: 0 0 14px var(--mint);
+            }
+
+            .control-bar {
+                position: sticky;
+                top: 12px;
+                z-index: 10;
+                display: grid;
+                grid-template-columns:
+                    auto minmax(170px, 1fr) minmax(170px, 1fr)
+                    auto auto;
+                align-items: center;
+                gap: 18px;
+                padding: 13px 15px;
+                margin-bottom: 22px;
+                background: rgba(18, 18, 24, 0.88);
+                border: 1px solid rgba(55, 55, 68, 0.8);
+                border-radius: 18px;
+                box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+                backdrop-filter: blur(18px);
+            }
+            .play-button,
+            .mode-button,
+            .size-button {
+                min-height: 34px;
+                border: 1px solid var(--line);
+                border-radius: 10px;
+                background: #202029;
+                padding: 0 13px;
+                cursor: pointer;
+                transition: 0.18s ease;
+            }
+            .play-button {
+                width: 38px;
+                padding: 0;
+                display: grid;
+                place-items: center;
+                background: var(--text);
+                color: #101014;
+                border: 0;
+            }
+            .play-button:hover,
+            .mode-button:hover,
+            .size-button:hover {
+                transform: translateY(-1px);
+                border-color: #555366;
+            }
+            .mode-button.active {
+                background: linear-gradient(135deg, var(--pink), var(--violet));
+                border-color: transparent;
+                color: white;
+            }
+            .control {
+                display: grid;
+                grid-template-columns: auto 1fr auto;
+                align-items: center;
+                gap: 10px;
+                min-width: 0;
+            }
+            .control label {
+                font-size: 12px;
+                color: var(--muted);
+            }
+            .control output {
+                min-width: 42px;
+                color: #ded9e6;
+                font-size: 12px;
+                font-variant-numeric: tabular-nums;
+                text-align: right;
+            }
+            input[type="range"] {
+                width: 100%;
+                accent-color: var(--pink);
+                cursor: pointer;
+            }
+
+            .grid {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(260px, 1fr));
+                gap: 16px;
+            }
+            .design-card {
+                position: relative;
+                overflow: hidden;
+                min-width: 0;
+                background: linear-gradient(
+                    155deg,
+                    rgba(27, 27, 36, 0.96),
+                    rgba(16, 16, 22, 0.98)
+                );
+                border: 1px solid var(--line);
+                border-radius: 22px;
+                cursor: pointer;
+                transition:
+                    border-color 0.2s,
+                    transform 0.2s,
+                    box-shadow 0.2s;
+            }
+            .design-card:hover {
+                transform: translateY(-3px);
+                border-color: #4a4858;
+                box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+            }
+            .design-card.selected {
+                border-color: var(--accent);
+                box-shadow:
+                    0 0 0 1px var(--accent),
+                    0 24px 55px rgba(0, 0, 0, 0.35);
+            }
+            .design-card.selected::after {
+                content: "SELECTED";
+                position: absolute;
+                right: 13px;
+                top: 13px;
+                padding: 5px 7px;
+                border-radius: 6px;
+                color: #fff;
+                background: color-mix(in srgb, var(--accent) 82%, #111);
+                font-size: 9px;
+                font-weight: 800;
+                letter-spacing: 0.12em;
+            }
+            .stage {
+                position: relative;
+                display: grid;
+                place-items: center;
+                height: 300px;
+                overflow: hidden;
+                background:
+                    radial-gradient(
+                        circle at 50% 72%,
+                        color-mix(in srgb, var(--accent) 20%, transparent),
+                        transparent 46%
+                    ),
+                    linear-gradient(
+                        180deg,
+                        rgba(255, 255, 255, 0.015),
+                        transparent
+                    );
+            }
+            .stage::before {
+                content: "";
+                position: absolute;
+                inset: auto 13% 16px;
+                height: 38px;
+                border-radius: 50%;
+                background: color-mix(in srgb, var(--accent) 11%, transparent);
+                filter: blur(18px);
+            }
+            .cat-svg {
+                width: min(86%, 270px);
+                height: min(86%, 270px);
+                overflow: visible;
+                filter: drop-shadow(0 18px 22px rgba(0, 0, 0, 0.34));
+            }
+            .cat-svg * {
+                vector-effect: non-scaling-stroke;
+            }
+            .eq-bar {
+                fill: var(--accent);
+                opacity: 0.18;
+                transform-box: fill-box;
+                transform-origin: bottom;
+            }
+            .shadow {
+                fill: #000;
+                opacity: 0.34;
+            }
+            .tail,
+            .body,
+            .head,
+            .ear-left,
+            .ear-right,
+            .arm-left,
+            .arm-right,
+            .paw-left,
+            .paw-right,
+            .deck,
+            .face,
+            .headphones {
+                transform-box: fill-box;
+                transform-origin: center;
+            }
+            .deck-disc {
+                transform-box: fill-box;
+                transform-origin: center;
+            }
+
+            .card-copy {
+                min-height: 152px;
+                padding: 17px 18px 19px;
+                border-top: 1px solid rgba(255, 255, 255, 0.055);
+            }
+            .card-head {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                gap: 12px;
+            }
+            .letter {
+                display: inline-grid;
+                place-items: center;
+                width: 26px;
+                height: 26px;
+                border: 1px solid color-mix(in srgb, var(--accent) 50%, #34343f);
+                border-radius: 8px;
+                color: var(--accent);
+                font-size: 12px;
+                font-weight: 800;
+            }
+            .mini-preview {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                color: #898591;
+                font-size: 10px;
+            }
+            .mini-preview svg {
+                width: 32px;
+                height: 32px;
+                border: 1px solid #33323d;
+                border-radius: 8px;
+                background: #0b0b0f;
+            }
+            h2 {
+                margin: 12px 0 6px;
+                font-size: 20px;
+                letter-spacing: -0.025em;
+            }
+            .motion-name {
+                color: var(--accent);
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+            }
+            .description {
+                margin: 8px 0 0;
+                color: var(--muted);
+                font-size: 13px;
+                line-height: 1.52;
+            }
+
+            .selection {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 18px;
+                margin-top: 18px;
+                padding: 17px 18px;
+                background: #111117;
+                border: 1px solid var(--line);
+                border-radius: 16px;
+            }
+            .selection strong {
+                display: block;
+                margin-bottom: 3px;
+                font-size: 14px;
+            }
+            .selection span {
+                color: var(--muted);
+                font-size: 12px;
+            }
+            .selection-code {
+                padding: 8px 10px;
+                border: 1px solid #34333f;
+                border-radius: 9px;
+                background: #191920;
+                color: #e6e1eb;
+                font-family: ui-monospace, monospace;
+                font-size: 12px;
+            }
+
+            body.compact .stage {
+                height: 180px;
+            }
+            body.compact .cat-svg {
+                width: 132px;
+                height: 132px;
+            }
+            body.compact .card-copy {
+                min-height: 142px;
+            }
+
+            @media (max-width: 1050px) {
+                .grid {
+                    grid-template-columns: repeat(2, minmax(260px, 1fr));
+                }
+                .control-bar {
+                    grid-template-columns: auto 1fr 1fr auto;
+                }
+                .size-button {
+                    display: none;
+                }
+            }
+            @media (max-width: 680px) {
+                .shell {
+                    width: min(100% - 22px, 560px);
+                    padding-top: 22px;
+                }
+                .hero {
+                    align-items: start;
+                    flex-direction: column;
+                }
+                .grid {
+                    grid-template-columns: 1fr;
+                }
+                .control-bar {
+                    position: relative;
+                    top: 0;
+                    grid-template-columns: auto 1fr auto;
+                    gap: 12px;
+                }
+                .control:nth-of-type(2) {
+                    grid-column: 1 / -1;
+                    grid-row: 2;
+                }
+                .stage {
+                    height: 280px;
+                }
+            }
+            @media (prefers-reduced-motion: reduce) {
+                .cat-svg {
+                    transition: none;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <main class="shell">
+            <header class="hero">
+                <div>
+                    <div class="eyebrow">InnerTune motion study · 01</div>
+                    <h1>Give the cat a personality.</h1>
+                    <p class="intro">
+                        Six procedural directions, all driven by the same BPM
+                        and audio energy. Toggle chorus mode to inspect each
+                        option’s big moment, then judge it again in the tiny
+                        tray preview.
+                    </p>
+                </div>
+                <div class="status-pill">
+                    <span class="status-dot"></span
+                    ><span>60 fps procedural preview</span>
+                </div>
+            </header>
+
+            <section class="control-bar" aria-label="Animation controls">
+                <button
+                    class="play-button"
+                    id="play"
+                    aria-label="Pause animation"
+                >
+                    Ⅱ
+                </button>
+                <div class="control">
+                    <label for="bpm">BPM</label>
+                    <input
+                        id="bpm"
+                        type="range"
+                        min="70"
+                        max="190"
+                        value="128"
+                    />
+                    <output id="bpmValue">128</output>
+                </div>
+                <div class="control">
+                    <label for="energy">Energy</label>
+                    <input
+                        id="energy"
+                        type="range"
+                        min="0"
+                        max="100"
+                        value="72"
+                    />
+                    <output id="energyValue">72%</output>
+                </div>
+                <button class="mode-button" id="chorus">Chorus mode</button>
+                <button class="size-button" id="size">Compact cards</button>
+            </section>
+
+            <section class="grid" id="grid"></section>
+
+            <section class="selection" aria-live="polite">
+                <div>
+                    <strong id="selectionTitle">Nothing selected yet</strong
+                    ><span id="selectionHint"
+                        >Click a card. You can also mix a face from one with
+                        motion from another.</span
+                    >
+                </div>
+                <code class="selection-code" id="selectionCode">Pick A–F</code>
+            </section>
+        </main>
+
+        <script>
+            const NS = "http://www.w3.org/2000/svg";
+            const designs = [
+                {
+                    key: "A",
+                    name: "The Headliner",
+                    motion: "Alternating deck energy",
+                    accent: "#ff5aa9",
+                    coat: "#d98a52",
+                    dark: "#70432f",
+                    chest: "#fff1e5",
+                    eye: "#baf77f",
+                    description:
+                        "The clearest evolution of the current cat: confident alternating paws, elastic ears, head bob and a restrained chorus jump.",
+                },
+                {
+                    key: "B",
+                    name: "Vinyl Gremlin",
+                    motion: "Scratch · listen · scratch",
+                    accent: "#9b73ff",
+                    coat: "#2f3040",
+                    dark: "#161720",
+                    chest: "#f4eee8",
+                    eye: "#d7ff70",
+                    description:
+                        "One paw scratches the record while the other cups a headphone. More character acting, less symmetrical dancing.",
+                },
+                {
+                    key: "C",
+                    name: "Chorus Launch",
+                    motion: "Crouch · launch · hangtime",
+                    accent: "#ff477e",
+                    coat: "#e39a58",
+                    dark: "#79462f",
+                    chest: "#fff4e8",
+                    eye: "#8effca",
+                    description:
+                        "The most theatrical option. It anticipates the chorus, compresses, launches with both paws high, then lands on the beat.",
+                },
+                {
+                    key: "D",
+                    name: "Pocket Groove",
+                    motion: "Sway · shoulder · tail",
+                    accent: "#69e6be",
+                    coat: "#ece3d4",
+                    dark: "#7d675b",
+                    chest: "#fffaf3",
+                    eye: "#7c5cff",
+                    description:
+                        "A softer, musical sway with shoulder rolls and a very readable tail. Expressive without constantly looking frantic.",
+                },
+                {
+                    key: "E",
+                    name: "Crowd Captain",
+                    motion: "Point · pump · call back",
+                    accent: "#ffb84f",
+                    coat: "#bc7466",
+                    dark: "#5a3540",
+                    chest: "#ffe8df",
+                    eye: "#f9ff87",
+                    description:
+                        "A tiny performer: points at the crowd, pumps one paw, opens its mouth on accents and throws both paws up for peaks.",
+                },
+                {
+                    key: "F",
+                    name: "Tray-Sized Menace",
+                    motion: "Maximum silhouette readability",
+                    accent: "#64b5ff",
+                    coat: "#c57f4f",
+                    dark: "#4d3540",
+                    chest: "#fff0dd",
+                    eye: "#c7ff74",
+                    description:
+                        "Designed backward from 24 px. Oversized paws, wider ear spacing and fewer tiny facial details make every pose survive the tray.",
+                },
+            ];
+
+            function catMarkup(d, mini = false) {
+                const uid = `${d.key}-${mini ? "mini" : "main"}`;
+                const pawOuter = d.key === "F" ? 16 : 13;
+                const pawInner = d.key === "F" ? 11 : 9;
+                return `
+        <svg class="cat-svg design-${d.key}" data-key="${d.key}" viewBox="0 0 240 240" role="img" aria-label="${d.name} animated DJ cat">
+          <defs>
+            <linearGradient id="deck-${uid}" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#363642"/><stop offset="1" stop-color="#18181f"/></linearGradient>
+            <filter id="glow-${uid}"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <g class="equalizer">
+            ${Array.from({ length: 9 }, (_, i) => `<rect class="eq-bar" data-i="${i}" x="${18 + i * 23}" y="68" width="11" height="112" rx="5.5"/>`).join("")}
+          </g>
+          <ellipse class="shadow" cx="120" cy="210" rx="60" ry="11"/>
+          <g class="cat">
+            <g class="tail"><path d="M77 157 C38 174,31 127,55 118 C69 113,69 137,55 140" fill="none" stroke="${d.dark}" stroke-width="18" stroke-linecap="round"/><path class="tail-tip" d="M55 140 C48 143,43 140,41 136" fill="none" stroke="${d.chest}" stroke-width="10" stroke-linecap="round"/></g>
+            <g class="body"><ellipse cx="120" cy="153" rx="48" ry="53" fill="${d.dark}"/><ellipse cx="120" cy="150" rx="43" ry="49" fill="${d.coat}"/><ellipse cx="120" cy="164" rx="27" ry="29" fill="${d.chest}" opacity=".92"/></g>
+            <g class="ear-left"><path d="M78 91 L84 42 L112 79 Z" fill="${d.dark}"/><path d="M84 82 L88 51 L106 77 Z" fill="${d.coat}"/><path d="M88 73 L91 57 L100 74 Z" fill="#f2a7ae"/></g>
+            <g class="ear-right"><path d="M128 79 L158 42 L164 92 Z" fill="${d.dark}"/><path d="M135 78 L154 51 L158 83 Z" fill="${d.coat}"/><path d="M143 74 L152 57 L155 74 Z" fill="#f2a7ae"/></g>
+            <g class="head">
+              <ellipse cx="120" cy="101" rx="55" ry="49" fill="${d.dark}"/><ellipse cx="120" cy="101" rx="50" ry="44" fill="${d.coat}"/>
+              <g class="headphones"><path d="M76 95 C73 46,166 45,164 96" fill="none" stroke="${d.accent}" stroke-width="9" stroke-linecap="round"/><rect x="65" y="85" width="18" height="35" rx="9" fill="#272733"/><rect x="157" y="85" width="18" height="35" rx="9" fill="#272733"/><rect x="69" y="91" width="8" height="23" rx="4" fill="${d.accent}"/><rect x="163" y="91" width="8" height="23" rx="4" fill="${d.accent}"/></g>
+              <g class="face">
+                <path d="M106 75 L113 88 M120 72 L120 87 M134 75 L127 88" stroke="${d.dark}" stroke-width="5" stroke-linecap="round"/>
+                <ellipse cx="101" cy="98" rx="13" ry="11" fill="${d.eye}"/><ellipse cx="139" cy="98" rx="13" ry="11" fill="${d.eye}"/><ellipse cx="101" cy="100" rx="3.2" ry="8" fill="#15141c"/><ellipse cx="139" cy="100" rx="3.2" ry="8" fill="#15141c"/><circle cx="97" cy="94" r="2.2" fill="white"/><circle cx="135" cy="94" r="2.2" fill="white"/>
+                <ellipse cx="108" cy="120" rx="17" ry="13" fill="${d.chest}"/><ellipse cx="132" cy="120" rx="17" ry="13" fill="${d.chest}"/><path d="M113 113 L127 113 L120 122 Z" fill="${d.accent}"/><path class="mouth" d="M120 122 C116 131,109 127,108 124 M120 122 C124 131,131 127,132 124" fill="none" stroke="#27212a" stroke-width="2.5" stroke-linecap="round"/>
+                <g class="whiskers" stroke="${d.chest}" stroke-width="2.2" stroke-linecap="round"><path d="M102 119 L74 112 M102 125 L70 126 M138 119 L166 112 M138 125 L170 126"/></g>
+              </g>
+            </g>
+            <g class="arm-left"><path d="M0 0 L-27 41" stroke="${d.dark}" stroke-width="19" stroke-linecap="round"/><path d="M0 0 L-27 41" stroke="${d.coat}" stroke-width="13" stroke-linecap="round"/><g class="paw-left"><circle cx="-27" cy="41" r="${pawOuter}" fill="${d.dark}"/><circle cx="-27" cy="41" r="${pawInner}" fill="${d.chest}"/></g></g>
+            <g class="arm-right"><path d="M0 0 L27 41" stroke="${d.dark}" stroke-width="19" stroke-linecap="round"/><path d="M0 0 L27 41" stroke="${d.coat}" stroke-width="13" stroke-linecap="round"/><g class="paw-right"><circle cx="27" cy="41" r="${pawOuter}" fill="${d.dark}"/><circle cx="27" cy="41" r="${pawInner}" fill="${d.chest}"/></g></g>
+          </g>
+          <g class="deck">
+            <rect x="30" y="174" width="180" height="48" rx="15" fill="#4a4857"/><rect x="34" y="168" width="172" height="48" rx="14" fill="url(#deck-${uid})"/>
+            <g class="deck-disc"><ellipse cx="101" cy="190" rx="46" ry="17" fill="#0d0d12"/><ellipse cx="101" cy="190" rx="35" ry="12" fill="#3f3d4b"/><ellipse cx="101" cy="190" rx="16" ry="7" fill="${d.accent}"/><circle cx="101" cy="190" r="3" fill="#101016"/></g>
+            <rect x="165" y="180" width="13" height="13" rx="5" fill="${d.accent}" filter="url(#glow-${uid})"/><path d="M167 204 H190" stroke="${d.accent}" stroke-width="4" stroke-linecap="round"/>
+          </g>
+        </svg>`;
+            }
+
+            const grid = document.querySelector("#grid");
+            grid.innerHTML = designs
+                .map(
+                    (d) => `
+      <article class="design-card" data-key="${d.key}" style="--accent:${d.accent}" tabindex="0" aria-label="Select design ${d.key}, ${d.name}">
+        <div class="stage">${catMarkup(d)}</div>
+        <div class="card-copy">
+          <div class="card-head"><span class="letter">${d.key}</span><div class="mini-preview">TRAY ${catMarkup(d, true)}</div></div>
+          <h2>${d.name}</h2><div class="motion-name">${d.motion}</div><p class="description">${d.description}</p>
+        </div>
+      </article>`,
+                )
+                .join("");
+
+            const state = {
+                playing: true,
+                chorus: false,
+                bpm: 128,
+                energy: 0.72,
+                start: performance.now(),
+                frozenAt: 0,
+            };
+            const specimens = [...document.querySelectorAll(".cat-svg")].map(
+                (svg) => ({
+                    svg,
+                    key: svg.dataset.key,
+                    cat: svg.querySelector(".cat"),
+                    body: svg.querySelector(".body"),
+                    head: svg.querySelector(".head"),
+                    left: svg.querySelector(".arm-left"),
+                    right: svg.querySelector(".arm-right"),
+                    tail: svg.querySelector(".tail"),
+                    ears: [
+                        svg.querySelector(".ear-left"),
+                        svg.querySelector(".ear-right"),
+                    ],
+                    mouth: svg.querySelector(".mouth"),
+                    shadow: svg.querySelector(".shadow"),
+                    disc: svg.querySelector(".deck-disc"),
+                    bars: [...svg.querySelectorAll(".eq-bar")],
+                }),
+            );
+
+            const clamp = (n, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, n));
+            const wave = (p, offset = 0) => (Math.sin(p + offset) + 1) / 2;
+            const ease = (n) => n * n * (3 - 2 * n);
+            const tform = (node, value) =>
+                node?.setAttribute("transform", value);
+
+            function pose(s, beats) {
+                const p = beats * Math.PI * 2;
+                const e = state.energy;
+                const chorus = state.chorus;
+                let x = 0,
+                    y = 0,
+                    rot = 0,
+                    head = 0,
+                    left = 0,
+                    right = 0,
+                    tail = 0,
+                    squash = 1,
+                    mouth = 0;
+                const alternate = ease(wave(p));
+                const beatPulse = Math.pow(wave(p * 2 - Math.PI / 2), 5);
+
+                if (s.key === "A") {
+                    y = -2.5 * e * beatPulse;
+                    head = Math.sin(p) * 3 * e;
+                    tail = Math.sin(p * 0.5) * 10;
+                    left = 128 * e * alternate;
+                    right = -128 * e * (1 - alternate);
+                    if (chorus) {
+                        y -=
+                            Math.pow(Math.max(0, Math.sin(p * 0.5)), 0.75) *
+                            22 *
+                            e;
+                        left = 132 * e;
+                        right = -132 * e;
+                    }
+                } else if (s.key === "B") {
+                    x = Math.sin(p * 0.5) * 2;
+                    y = -beatPulse * 2;
+                    head = -8 + Math.sin(p * 0.5) * 6;
+                    tail = Math.sin(p * 1.2) * 18;
+                    left = 38 + Math.sin(p * 2) * 16;
+                    right = -82 - Math.sin(p) * 7;
+                    if (chorus && wave(p * 0.5) > 0.72) {
+                        right = -132;
+                        y -= 10;
+                    }
+                } else if (s.key === "C") {
+                    const cycle = ((beats % 4) + 4) % 4;
+                    const launch = chorus
+                        ? clamp((cycle - 0.7) / 0.35) *
+                          (1 - clamp((cycle - 2.65) / 0.35))
+                        : 0;
+                    const arc = launch
+                        ? Math.sin(clamp((cycle - 1.05) / 1.6) * Math.PI)
+                        : 0;
+                    const crouch =
+                        chorus && cycle < 1.05
+                            ? Math.sin((cycle / 1.05) * Math.PI)
+                            : 0;
+                    y = arc * -42 * e + crouch * 7;
+                    squash = 1 - crouch * 0.1 + arc * 0.06;
+                    head = Math.sin(p * 0.5) * 2;
+                    left = launch ? 136 : 95 * e * alternate;
+                    right = launch ? -136 : -95 * e * (1 - alternate);
+                    tail = Math.sin(p * 0.5) * 14;
+                } else if (s.key === "D") {
+                    x = Math.sin(p * 0.5) * 11 * e;
+                    rot = Math.sin(p * 0.5) * 5 * e;
+                    head = Math.sin(p * 0.5 + 0.8) * -7;
+                    tail = Math.sin(p * 0.5 + 1.5) * 22;
+                    left = 48 + Math.sin(p * 0.5) * 35;
+                    right = -48 + Math.sin(p * 0.5) * 35;
+                    if (chorus) {
+                        y = -beatPulse * 8;
+                        left += 35;
+                        right -= 35;
+                    }
+                } else if (s.key === "E") {
+                    y = -beatPulse * 4;
+                    head = Math.sin(p) * 5;
+                    tail = Math.sin(p * 0.8) * 15;
+                    mouth = beatPulse;
+                    const call = Math.floor(beats) % 4;
+                    left = call < 2 ? 118 : 42;
+                    right = call >= 2 ? -118 : -42;
+                    if (chorus && beatPulse > 0.45) {
+                        left = 138;
+                        right = -138;
+                        y -= 12;
+                    }
+                } else {
+                    y = -beatPulse * 7 * e;
+                    head = Math.sin(p) * 4;
+                    tail = Math.sin(p) * 12;
+                    left = 142 * e * alternate;
+                    right = -142 * e * (1 - alternate);
+                    if (chorus) {
+                        left = 145;
+                        right = -145;
+                        y -= Math.pow(wave(p * 0.5), 2) * 18;
+                        squash = 1 + beatPulse * 0.04;
+                    }
+                }
+
+                tform(
+                    s.cat,
+                    `translate(${x.toFixed(2)} ${y.toFixed(2)}) rotate(${rot.toFixed(2)} 120 150) scale(1 ${squash.toFixed(3)})`,
+                );
+                tform(s.head, `rotate(${head.toFixed(2)} 120 104)`);
+                tform(s.left, `translate(88 137) rotate(${left.toFixed(2)})`);
+                tform(
+                    s.right,
+                    `translate(152 137) rotate(${right.toFixed(2)})`,
+                );
+                tform(s.tail, `rotate(${tail.toFixed(2)} 77 157)`);
+                tform(
+                    s.ears[0],
+                    `rotate(${(-head * 0.55 + beatPulse * 2).toFixed(2)} 88 76)`,
+                );
+                tform(
+                    s.ears[1],
+                    `rotate(${(-head * 0.55 - beatPulse * 2).toFixed(2)} 152 76)`,
+                );
+                tform(
+                    s.shadow,
+                    `scale(${(1 - Math.min(24, -y) / 90).toFixed(3)} 1)`,
+                );
+                tform(s.disc, `rotate(${(beats * 72).toFixed(2)} 101 190)`);
+                if (s.mouth) s.mouth.style.strokeWidth = `${2.5 + mouth * 3}`;
+                s.bars.forEach((bar, i) => {
+                    const activity =
+                        0.18 +
+                        e *
+                            (0.28 +
+                                0.72 *
+                                    wave(p * (1 + (i % 3) * 0.18), i * 0.74));
+                    bar.style.transform = `scaleY(${activity.toFixed(3)})`;
+                    bar.style.opacity = `${0.08 + e * 0.2}`;
+                });
+            }
+
+            function frame(now) {
+                if (state.playing) {
+                    const elapsed = state.frozenAt + (now - state.start) / 1000;
+                    const beats = (elapsed * state.bpm) / 60;
+                    specimens.forEach((s) => pose(s, beats));
+                }
+                requestAnimationFrame(frame);
+            }
+            requestAnimationFrame(frame);
+
+            const play = document.querySelector("#play");
+            play.addEventListener("click", () => {
+                if (state.playing) {
+                    state.frozenAt += (performance.now() - state.start) / 1000;
+                    state.playing = false;
+                    play.textContent = "▶";
+                    play.ariaLabel = "Play animation";
+                } else {
+                    state.start = performance.now();
+                    state.playing = true;
+                    play.textContent = "Ⅱ";
+                    play.ariaLabel = "Pause animation";
+                }
+            });
+            document
+                .querySelector("#bpm")
+                .addEventListener("input", (event) => {
+                    state.bpm = +event.target.value;
+                    document.querySelector("#bpmValue").value = state.bpm;
+                });
+            document
+                .querySelector("#energy")
+                .addEventListener("input", (event) => {
+                    state.energy = +event.target.value / 100;
+                    document.querySelector("#energyValue").value =
+                        `${event.target.value}%`;
+                });
+            document
+                .querySelector("#chorus")
+                .addEventListener("click", (event) => {
+                    state.chorus = !state.chorus;
+                    event.currentTarget.classList.toggle(
+                        "active",
+                        state.chorus,
+                    );
+                });
+            document
+                .querySelector("#size")
+                .addEventListener("click", () =>
+                    document.body.classList.toggle("compact"),
+                );
+
+            function select(card) {
+                document
+                    .querySelectorAll(".design-card")
+                    .forEach((item) =>
+                        item.classList.toggle("selected", item === card),
+                    );
+                const design = designs.find(
+                    (item) => item.key === card.dataset.key,
+                );
+                document.querySelector("#selectionTitle").textContent =
+                    `${design.key} · ${design.name}`;
+                document.querySelector("#selectionHint").textContent =
+                    design.description;
+                document.querySelector("#selectionCode").textContent =
+                    `My pick: ${design.key}`;
+                localStorage.setItem("innertune-cat-pick", design.key);
+            }
+            document.querySelectorAll(".design-card").forEach((card) => {
+                card.addEventListener("click", () => select(card));
+                card.addEventListener("keydown", (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        select(card);
+                    }
+                });
+            });
+            const saved = localStorage.getItem("innertune-cat-pick");
+            if (saved)
+                select(
+                    document.querySelector(`.design-card[data-key="${saved}"]`),
+                );
+        </script>
+    </body>
+</html>
