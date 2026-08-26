@@ -11,7 +11,7 @@
     <AssemblyName>InnerTune</AssemblyName>
     <RootNamespace>InnerTune</RootNamespace>
     <ApplicationIcon>Assets\InnerTune.ico</ApplicationIcon>
-    <Version>1.1.28</Version>
+    <Version>1.1.29</Version>
     <Authors>InnerTune</Authors>
     <Product>InnerTune</Product>
     <Description>A lightweight Windows music player powered by InnerTube.</Description>

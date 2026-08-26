@@ -19,10 +19,10 @@ InnerTune discovers Codex from the official Windows or standalone installation, 
 - The queue remains visible while you search, chat, or browse your library.
 - **Play** or a double-click starts a song as a standalone **Playing now** session. **Add** then grows it into an ad-hoc queue without interrupting playback.
 - **Next** places any song directly after the current one. It takes priority over shuffle, and the remaining shuffled songs still play once each.
-- Select an artist name anywhere in the app to open that artist’s complete multi-page InnerTube catalog. Older library entries resolve and remember their artist ID automatically.
+- Select the artist text itself to open that artist’s complete multi-page InnerTube catalog. Artist links use a theme-aware hover color, and older library entries resolve and remember their artist ID automatically.
 - Double-click a queued song to play it.
 - Use **×** on a queue row to remove it.
-- Save queues with paths such as `Focus/Night`; the folders are created automatically.
+- Save queues with paths such as `Focus/Night`; the folders are created automatically. Saved queues display a stable short ID, and Luna uses that ID to replace, append to, remove from, rename, or move the intended playlist without creating a duplicate.
 - **Share** copies a compact `innertune://playlist/...` link. Opening the link in Windows previews and saves the named playlist without replacing the current queue; **Import link** under Saved queues is available for manual pasting.
 - Press `:` outside a text field to open Luna. Search appears again only when you select Search.
 - Use **Mini player** for the compact always-on-top widget.

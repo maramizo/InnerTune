@@ -65,14 +65,36 @@ public sealed class Favorite
 public sealed class SavedQueue : INotifyPropertyChanged
 {
     private bool _isActive;
+    private List<Track> _tracks = [];
     public string Id { get; set; } = Guid.NewGuid().ToString();
     public string Name { get; set; } = "Queue";
     public string? FolderId { get; set; }
-    public List<Track> Tracks { get; set; } = [];
+    public List<Track> Tracks
+    {
+        get => _tracks;
+        set
+        {
+            _tracks = value ?? [];
+            PropertyChanged?.Invoke(this, new(nameof(Tracks)));
+            PropertyChanged?.Invoke(this, new(nameof(Summary)));
+            PropertyChanged?.Invoke(this, new(nameof(Detail)));
+            PropertyChanged?.Invoke(this, new(nameof(CoverUrl)));
+        }
+    }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
     [JsonIgnore] public string DisplayPath { get; set; } = "";
     [JsonIgnore] public string Summary => $"{(string.IsNullOrWhiteSpace(DisplayPath) ? Name : DisplayPath)}  ·  {Tracks.Count} songs";
+    [JsonIgnore]
+    public string ShortId
+    {
+        get
+        {
+            var compact = string.Concat((Id ?? "").Where(char.IsLetterOrDigit));
+            return compact.Length <= 8 ? compact : compact[..8];
+        }
+    }
+    [JsonIgnore] public string Detail => $"{Tracks.Count} {(Tracks.Count == 1 ? "song" : "songs")}  ·  #{ShortId}";
     [JsonIgnore] public string? CoverUrl => Tracks.FirstOrDefault()?.ArtworkUrl;
     [JsonIgnore]
     public bool IsActive

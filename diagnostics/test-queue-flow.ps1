@@ -35,7 +35,7 @@ $track = @{ id = 'current'; title = 'Current song'; artist = 'Test artist'; dura
     queueSourceId = $null; queueSourceName = 'Playing now'
     playback = @{ status = 'paused'; track = $track; trackId = 'current'; queueIndex = 0; queueId = $null; queueName = 'Playing now'; positionSeconds = 12 }
     queue = @($track); folders = @(); favorites = @(@{ track = $track; folderId = $null })
-    savedQueues = @(@{ id = 'saved'; name = 'Saved test queue'; folderId = $null; tracks = @($track) }); recentlyPlayed = @(); videoMappings = @{}; pendingCommands = @()
+    savedQueues = @(@{ id = '1234abcd-5678-90ef-1234-567890abcdef'; name = 'Saved test queue'; folderId = $null; tracks = @($track) }); recentlyPlayed = @(); videoMappings = @{}; pendingCommands = @()
     settings = @{ theme = 'midnight'; icon = 'dj-cat'; animatedIconEnabled = $false; autoResumeOnStart = $false }
 } | ConvertTo-Json -Depth 20 | Set-Content (Join-Path $testRoot 'library.json') -Encoding utf8
 
@@ -71,9 +71,11 @@ try {
     $artistCondition = New-Object System.Windows.Automation.PropertyCondition(
         [System.Windows.Automation.AutomationElement]::NameProperty, 'Test artist')
     $artistLabels = @($root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $artistCondition))
+    $artistHitWidth = if ($artistLabels.Count -gt 0) { $artistLabels[0].Current.BoundingRectangle.Width } else { 0 }
     if ($root.Current.BoundingRectangle.Left -gt -30000) { throw 'The queue test window was not off-screen.' }
     if ($nextActions.Count -lt 2) { throw "Expected queue and library Play next actions; found $($nextActions.Count)." }
     if ($artistLabels.Count -lt 1) { throw 'The artist link text was not exposed to the UI.' }
+    if ($artistHitWidth -gt 100) { throw "The artist click target is wider than its text ($artistHitWidth px)." }
 
     [pscustomobject]@{
         Passed = $true
@@ -82,6 +84,7 @@ try {
         PlayNextActions = $nextActions.Count
         SavedQueueViewRendered = $true
         ArtistLabels = $artistLabels.Count
+        ArtistHitWidth = $artistHitWidth
         QueueSource = 'Playing now'
     } | ConvertTo-Json -Compress
 }

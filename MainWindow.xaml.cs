@@ -530,12 +530,13 @@ public partial class MainWindow : Window
             var theme = (_library.Settings.Theme ?? "midnight").ToLowerInvariant();
             var palette = theme switch
             {
-                "graphite" => new ThemePalette("#0C1011", "#101617", "#12191A", "#171F20", "#172426", "#63D8C8"),
-                "oled" => new ThemePalette("#000000", "#050506", "#080809", "#0B0B0D", "#170B12", "#FF69A8"),
-                _ => new ThemePalette("#0B0B0E", "#101014", "#111115", "#17171C", "#211B33", "#9D7BFF")
+                "graphite" => new ThemePalette("#0C1011", "#101617", "#12191A", "#171F20", "#172426", "#63D8C8", "#8BE7DC"),
+                "oled" => new ThemePalette("#000000", "#050506", "#080809", "#0B0B0D", "#170B12", "#FF69A8", "#FF9AC5"),
+                _ => new ThemePalette("#0B0B0E", "#101014", "#111115", "#17171C", "#211B33", "#9D7BFF", "#C8B8FF")
             };
             _library.Settings.Theme = theme is "graphite" or "oled" ? theme : "midnight";
             SetResourceBrush("Accent", palette.Accent);
+            SetResourceBrush("ArtistLinkHover", palette.ArtistHover);
             SetResourceBrush("Surface", palette.Content);
             SetResourceBrush("SurfaceRaised", palette.Player);
             Background = Brush(palette.Window);
@@ -826,7 +827,8 @@ public partial class MainWindow : Window
         await SaveAsync();
     }
 
-    private sealed record ThemePalette(string Window, string Navigation, string Content, string Player, string Glow, string Accent);
+    private sealed record ThemePalette(string Window, string Navigation, string Content, string Player, string Glow,
+        string Accent, string ArtistHover);
 
     private async Task SearchAsync()
     {
@@ -2028,16 +2030,34 @@ public partial class MainWindow : Window
 
     private async void SaveQueue_Click(object sender, RoutedEventArgs e)
     {
-        var path = PromptDialog.Show(this, "Save queue", "Name or folder/name", "My queue");
+        var activeSaved = _library.SavedQueues.FirstOrDefault(queue => queue.Id == _library.QueueSourceId);
+        var suggested = activeSaved is null
+            ? "My queue"
+            : (string.IsNullOrWhiteSpace(activeSaved.DisplayPath) ? activeSaved.Name : activeSaved.DisplayPath)
+                .Replace(" / ", "/", StringComparison.Ordinal);
+        var path = PromptDialog.Show(this, "Save queue", "Name or folder/name", suggested);
         if (string.IsNullOrWhiteSpace(path)) return;
         var parts = path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         if (parts.Length == 0) return;
         var folder = EnsureFolder(string.Join('/', parts.SkipLast(1)));
         var name = parts[^1];
-        var existing = _library.SavedQueues.FirstOrDefault(x => x.Name.Equals(name, StringComparison.OrdinalIgnoreCase) && x.FolderId == folder?.Id);
-        if (existing is null) _library.SavedQueues.Add(new() { Name = name, FolderId = folder?.Id, Tracks = _library.Queue.ToList() });
-        else { existing.Tracks = _library.Queue.ToList(); existing.UpdatedAt = DateTimeOffset.Now; }
-        await SaveAsync(); SetStatus($"Saved queue “{name}”");
+        var saved = _library.SavedQueues.FirstOrDefault(queue =>
+            queue.Name.Equals(name, StringComparison.OrdinalIgnoreCase) && queue.FolderId == folder?.Id);
+        if (saved is null)
+        {
+            saved = new SavedQueue { Name = name, FolderId = folder?.Id, Tracks = _library.Queue.ToList() };
+            _library.SavedQueues.Add(saved);
+        }
+        else
+        {
+            saved.Tracks = _library.Queue.ToList();
+            saved.UpdatedAt = DateTimeOffset.Now;
+        }
+        _library.QueueSourceId = saved.Id;
+        _library.QueueSourceName = JoinFolderPath(saved.FolderId, saved.Name);
+        _playbackDirty = true;
+        await SaveAsync();
+        SetStatus($"Saved queue “{name}”  ·  #{saved.ShortId}");
     }
 
     private void ShareQueue_Click(object sender, RoutedEventArgs e)

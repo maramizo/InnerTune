@@ -13,6 +13,14 @@ var optInResumesOnlyPlaying = PlaybackRestorePolicy.ShouldAutoResume(playing, se
     !PlaybackRestorePolicy.ShouldAutoResume(paused, settings);
 var roundTrip = JsonSerializer.Deserialize<AppSettings>(JsonSerializer.Serialize(settings));
 var serializationWorks = roundTrip is { AutoResumeOnStart: true, Theme: "midnight", Icon: "dj-cat" };
+var savedQueue = new SavedQueue
+{
+    Id = "1234abcd-5678-90ef-1234-567890abcdef",
+    Name = "Identity test",
+    Tracks = [new Track { Id = "identity-track", Title = "Identity track", Artist = "Artist" }]
+};
+var savedQueueIdentityWorks = savedQueue.ShortId == "1234abcd" &&
+    savedQueue.Detail == "1 song  ·  #1234abcd";
 var iconAnimator = new AudioIconAnimator();
 iconAnimator.SetTempo(100);
 var animatedFrames = Enumerable.Range(0, 72).Select(_ => iconAnimator.Update(.8f, true, true, 1d / 30)).ToArray();
@@ -351,13 +359,14 @@ foreach (var inspectedPath in args.Where(File.Exists))
     }
     inspectedTracks.Add(new { path = inspectedPath, analysis = inspectedAnalysis, jumpCoverage = inspectedJumpCoverage });
 }
-var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && iconLevelsWork && delayedTickCatchesUp && choreographyMarkersWork && offBeatLandingStillJumps && pianoDoesNotJump && raveClassificationWorks && jumpStyleGateWorks && catalogStyleGateWorks && chorusPeakPlanningWorks && predictiveJumpPlanningWorks && jumpPoseIgnoresHandIntensity && airborneArmsIgnoreLiveVolume && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks && motionAnalysisSerializationWorks;
+var passed = defaultsAreSafe && defaultDoesNotResume && optInResumesOnlyPlaying && serializationWorks && savedQueueIdentityWorks && iconLevelsWork && delayedTickCatchesUp && choreographyMarkersWork && offBeatLandingStillJumps && pianoDoesNotJump && raveClassificationWorks && jumpStyleGateWorks && catalogStyleGateWorks && chorusPeakPlanningWorks && predictiveJumpPlanningWorks && jumpPoseIgnoresHandIntensity && airborneArmsIgnoreLiveVolume && tempoTrackingWorks && representativeWindowWorks && representativeAudioSampleWorks && audioMeterWorks && pathMergeWorks && installerEnvironmentWorks && playbackStoreWorks && motionAnalysisSerializationWorks;
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     passed,
     defaultTheme = new AppSettings().Theme,
     defaultIcon = new AppSettings().Icon,
     animatedIconDefault = new AppSettings().AnimatedIconEnabled,
+    savedQueueIdentityWorks,
     audioIconLevelsWork = iconLevelsWork,
     delayedTickCatchesUp,
     choreographyMarkersWork,

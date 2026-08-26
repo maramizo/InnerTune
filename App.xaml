@@ -9,6 +9,16 @@
     <SolidColorBrush x:Key="Accent" Color="#9D7BFF"/>
     <SolidColorBrush x:Key="TextPrimary" Color="#FAFAFC"/>
     <SolidColorBrush x:Key="TextMuted" Color="#A6A4AD"/>
+    <SolidColorBrush x:Key="ArtistLinkHover" Color="#C8B8FF"/>
+    <Style x:Key="ArtistLink" TargetType="TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource TextMuted}"/>
+      <Setter Property="HorizontalAlignment" Value="Left"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="ToolTip" Value="Open artist"/>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Foreground" Value="{DynamicResource ArtistLinkHover}"/></Trigger>
+      </Style.Triggers>
+    </Style>
     <Style TargetType="ToolTip">
       <Setter Property="Background" Value="#292836"/><Setter Property="Foreground" Value="White"/>
     </Style>

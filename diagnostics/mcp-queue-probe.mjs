@@ -14,6 +14,7 @@ const next = song('next');
 const state = async () => JSON.parse(await readFile(join(dataDirectory, 'library.json'), 'utf8'));
 const ids = data => data.queue.map(track => track.id).join(',');
 const expect = (actual, wanted, message) => { if (actual !== wanted) throw new Error(`${message}: expected ${wanted}, got ${actual}`); };
+const toolJson = result => JSON.parse(result.content.find(item => item.type === 'text')?.text || '{}');
 
 await writeFile(join(dataDirectory, 'library.json'), JSON.stringify({
   version: 1,
@@ -25,8 +26,8 @@ await writeFile(join(dataDirectory, 'library.json'), JSON.stringify({
   folders: [],
   favorites: [{track: added, folderId: null}, {track: next, folderId: null}],
   savedQueues: [
-    {id: 'one', name: 'One', folderId: null, tracks: [current, added]},
-    {id: 'two', name: 'Two', folderId: null, tracks: [added, next]}
+    {id: '11111111-1111-4111-8111-111111111111', name: 'One', folderId: null, tracks: [current, added]},
+    {id: '22222222-2222-4222-8222-222222222222', name: 'Two', folderId: null, tracks: [added, next]}
   ],
   recentlyPlayed: [],
   pendingCommands: [],
@@ -63,7 +64,27 @@ try {
   expect(data.queueSourceName, 'All queues · shuffled', 'Shuffle all used the wrong source label');
   expect(data.pendingCommands.at(-1)?.type, 'play', 'Shuffle all did not reach the live player');
 
-  console.log(JSON.stringify({passed: true, adHocQueue: true, playNext: true, standalonePlay: true, shuffleAllSavedQueues: true}));
+  const musicState = toolJson(await client.callTool({name: 'get_music_state', arguments: {}}));
+  const firstSaved = musicState.savedQueues.find(queue => queue.path === 'One');
+  expect(firstSaved?.shortId, '11111111', 'Saved queue did not expose a stable short ID');
+
+  await client.callTool({name: 'replace_queue', arguments: {videoIds: [next.id]}});
+  await client.callTool({name: 'update_saved_queue', arguments: {shortId: '#11111111'}});
+  data = await state();
+  expect(data.savedQueues[0].tracks.map(track => track.id).join(','), 'next', 'Short-ID replace did not use the current queue');
+
+  await client.callTool({name: 'update_saved_queue', arguments: {shortId: '11111111', mode: 'append', videoIds: [added.id, next.id]}});
+  data = await state();
+  expect(data.savedQueues[0].tracks.map(track => track.id).join(','), 'next,added', 'Short-ID append did not deduplicate songs');
+
+  await client.callTool({name: 'update_saved_queue', arguments: {shortId: '11111111', mode: 'remove', videoIds: [next.id]}});
+  data = await state();
+  expect(data.savedQueues[0].tracks.map(track => track.id).join(','), 'added', 'Short-ID remove did not update the saved queue');
+  expect(data.savedQueues.length, 2, 'Short-ID updates created a duplicate saved queue');
+  expect(data.savedQueues[0].id, '11111111-1111-4111-8111-111111111111', 'Short-ID updates changed playlist identity');
+  expect(ids(data), 'next', 'Updating a saved queue unexpectedly changed the current queue');
+
+  console.log(JSON.stringify({passed: true, adHocQueue: true, playNext: true, standalonePlay: true, shuffleAllSavedQueues: true, savedQueueShortIds: true, updateSavedQueue: true}));
 }
 finally {
   await client.close().catch(() => {});
