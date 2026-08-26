@@ -59,23 +59,22 @@ internal static class Program
         Save(frames[0], idlePath);
         SaveIcon(frames[0], iconPath);
 
-        var jumpMarkersAreGrounded = new[] { 0, AudioIconAnimator.PhaseCount / 2 }
-            .All(phase => hashes[AudioIconAnimator.EncodeJump(phase)] ==
-                hashes[AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, phase)]);
-        var airbornePosesOwnTheGesture = Enumerable.Range(0, AudioIconAnimator.PhaseCount)
-            .Where(phase => !AudioIconAnimator.IsJumpMarker(phase))
+        var jumpFramesNeverUseGroundedGesture = Enumerable.Range(0, AudioIconAnimator.PhaseCount)
             .All(phase => hashes[AudioIconAnimator.EncodeJump(phase)] !=
                 hashes[AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, phase)]);
+        var jumpFramesKeepBothPawsRaised = Enumerable.Range(0, AudioIconAnimator.PhaseCount)
+            .Select(phase => ReactiveDjIconRenderer.CalculateArmLifts(1, phase, true))
+            .All(lifts => lifts.Left == 1 && lifts.Right == 1);
         var passed = frames.Length == AudioIconAnimator.FrameCount &&
-            hashes.Distinct().Count() == frames.Length - 2 &&
-            jumpMarkersAreGrounded && airbornePosesOwnTheGesture;
+            hashes.Distinct().Count() == frames.Length &&
+            jumpFramesNeverUseGroundedGesture && jumpFramesKeepBothPawsRaised;
         Console.WriteLine(JsonSerializer.Serialize(new
         {
             passed,
             frameCount = frames.Length,
             uniqueFrames = hashes.Distinct().Count(),
-            jumpMarkersAreGrounded,
-            airbornePosesOwnTheGesture,
+            jumpFramesNeverUseGroundedGesture,
+            jumpFramesKeepBothPawsRaised,
             selected,
             contactSheet = contactPath,
             idle = idlePath,

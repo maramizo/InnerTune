@@ -84,12 +84,22 @@ Apply standard .NET formatting with `dotnet format InnerTune.Windows.csproj`. Be
 powershell -ExecutionPolicy Bypass -File .\diagnostics\format-check.ps1
 ```
 
-The deterministic motion tuner evaluates the production planner against actual cached audio, enforces zero movement across its grounded instrumental controls, and uses differential evolution to solve the eleven chorus-detection parameters. It reports the selected point and the precision/recall Pareto frontier as JSON:
+The deterministic motion tuner evaluates the production planner against actual cached audio, enforces zero movement across its grounded instrumental controls, and uses differential evolution to solve the twenty chorus-detection and rhythmic-style parameters. It reports the selected point and the precision/recall Pareto frontier as JSON:
 
 ```powershell
 dotnet run --project .\diagnostics\MotionTuningProbe\MotionTuningProbe.csproj -c Release -- `
   --population 36 --generations 22
 ```
+
+An optional persistent PyTorch/CUDA worker can calculate the spectral similarity matrices on an NVIDIA GPU. When the CUDA Python installation belongs to a non-default WSL user, identify both explicitly:
+
+```powershell
+dotnet run --project .\diagnostics\MotionTuningProbe\MotionTuningProbe.csproj -c Release -- `
+  --gpu --wsl-user <user> --gpu-python /path/to/python3 `
+  --population 36 --generations 22
+```
+
+The JSON output separates backend initialization, context preparation, and total audio/context preparation so CPU and GPU runs can be compared directly.
 
 ## Publish a release locally
 

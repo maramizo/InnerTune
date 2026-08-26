@@ -8,5 +8,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\InnerTune.Windows.csproj" />
+    <None Include="gpu_similarity_worker.py" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

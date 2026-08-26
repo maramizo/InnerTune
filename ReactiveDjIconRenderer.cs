@@ -46,7 +46,7 @@ public static class ReactiveDjIconRenderer
         {
             var angle = phase * Math.PI * 2 / AudioIconAnimator.PhaseCount;
             DrawEqualizer(drawing, amplitude, angle);
-            DrawCat(drawing, amplitude, angle, jumping);
+            DrawCat(drawing, amplitude, angle, phase, jumping);
         }
         var bitmap = new RenderTargetBitmap(Size, Size, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(visual);
@@ -70,20 +70,26 @@ public static class ReactiveDjIconRenderer
         }
     }
 
-    private static void DrawCat(DrawingContext drawing, double amplitude, double angle, bool jumping)
+    public static (double Left, double Right) CalculateArmLifts(double amplitude, int phase, bool jumping)
     {
-        // One paw works the deck while the other stays raised. A jump begins
-        // from that grounded marker, then throws both paws overhead in the air
-        // and returns them to the alternating pose for a clean landing.
+        amplitude = Math.Clamp(amplitude, 0, 1);
+        var angle = Math.Clamp(phase, 0, AudioIconAnimator.PhaseCount - 1) * Math.PI * 2 /
+            AudioIconAnimator.PhaseCount;
         var alternation = .5 + .5 * Math.Cos(angle);
         alternation = alternation * alternation * (3 - 2 * alternation);
-        var groundedLeftLift = amplitude * alternation;
-        var groundedRightLift = amplitude * (1 - alternation);
+        return jumping
+            ? (amplitude, amplitude)
+            : (amplitude * alternation, amplitude * (1 - alternation));
+    }
+
+    private static void DrawCat(DrawingContext drawing, double amplitude, double angle, int phase, bool jumping)
+    {
+        // One grounded paw works the deck while the other stays raised. Once
+        // a jump clip starts, both paws remain overhead for every frame. The
+        // body may cross deck height at a takeoff marker, but the arm bank must
+        // never briefly fall back to a grounded gesture mid-jump.
+        var (leftLift, rightLift) = CalculateArmLifts(amplitude, phase, jumping);
         var jump = jumping ? Math.Abs(Math.Sin(angle)) : 0;
-        var airborne = Math.Clamp(jump / .20, 0, 1);
-        airborne = airborne * airborne * (3 - 2 * airborne);
-        var leftLift = groundedLeftLift + (amplitude - groundedLeftLift) * airborne;
-        var rightLift = groundedRightLift + (amplitude - groundedRightLift) * airborne;
         var gesture = Math.Max(leftLift, rightLift);
         // The resting cat sits into the deck; rave frames lift the whole body
         // far enough to read even at tray size without clipping the headset.
