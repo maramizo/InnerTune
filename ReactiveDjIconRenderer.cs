@@ -73,13 +73,30 @@ public static class ReactiveDjIconRenderer
     public static (double Left, double Right) CalculateArmLifts(double amplitude, int phase, bool jumping)
     {
         amplitude = Math.Clamp(amplitude, 0, 1);
-        var angle = Math.Clamp(phase, 0, AudioIconAnimator.PhaseCount - 1) * Math.PI * 2 /
-            AudioIconAnimator.PhaseCount;
-        var alternation = .5 + .5 * Math.Cos(angle);
-        alternation = alternation * alternation * (3 - 2 * alternation);
-        return jumping
-            ? (amplitude, amplitude)
-            : (amplitude * alternation, amplitude * (1 - alternation));
+        if (jumping) return (amplitude, amplitude);
+        if (amplitude <= 0) return (0, 0);
+
+        // Headliner choreography: keep one paw clearly overhead and the other
+        // planted on the deck for most of each beat, then cross over quickly.
+        // A small minimum gesture keeps quiet passages readable at tray size;
+        // loudness still controls the remaining reach, bob and equalizer.
+        var balance = .5 + .5 * Math.Cos(PhaseAngle(phase));
+        var alternation = SmoothStep(.32, .68, balance);
+        var gesture = .45 + .55 * amplitude;
+        return (gesture * alternation, gesture * (1 - alternation));
+    }
+
+    public static double CalculateHeadTilt(double amplitude, int phase, bool jumping)
+    {
+        var (leftLift, rightLift) = CalculateArmLifts(amplitude, phase, jumping);
+        return jumping ? 0 : (rightLift - leftLift) * 4.2;
+    }
+
+    public static double CalculateTailAngle(double amplitude, int phase, bool jumping)
+    {
+        amplitude = Math.Clamp(amplitude, 0, 1);
+        var reach = jumping ? 4 : 11 * amplitude;
+        return Math.Sin(PhaseAngle(phase) + .65) * reach;
     }
 
     private static void DrawCat(DrawingContext drawing, double amplitude, double angle, int phase, bool jumping)
@@ -89,6 +106,8 @@ public static class ReactiveDjIconRenderer
         // body may cross deck height at a takeoff marker, but the arm bank must
         // never briefly fall back to a grounded gesture mid-jump.
         var (leftLift, rightLift) = CalculateArmLifts(amplitude, phase, jumping);
+        var headTilt = CalculateHeadTilt(amplitude, phase, jumping);
+        var tailAngle = CalculateTailAngle(amplitude, phase, jumping);
         var jump = jumping ? Math.Abs(Math.Sin(angle)) : 0;
         var gesture = Math.Max(leftLift, rightLift);
         // The resting cat sits into the deck; rave frames lift the whole body
@@ -98,74 +117,86 @@ public static class ReactiveDjIconRenderer
         var shadowAlpha = (byte)Math.Round(58 - 26 * jump);
         drawing.DrawEllipse(FrozenBrush(shadowAlpha, 0, 0, 0), null, new Point(64, 119), shadowWidth, 7 - 2 * jump);
 
-        var tailOutline = FrozenPen(Ink, 15);
-        var tailPen = FrozenPen(Fur, 11);
-        var tail = new StreamGeometry();
-        using (var geometry = tail.Open())
+        drawing.PushTransform(new RotateTransform(tailAngle, 43, 83 + bob));
+        try
         {
-            geometry.BeginFigure(new Point(43, 83 + bob), false, false);
-            geometry.BezierTo(new Point(17, 88), new Point(17, 59), new Point(31, 57 + bob), true, false);
+            var tailOutline = FrozenPen(Ink, 15);
+            var tailPen = FrozenPen(Fur, 11);
+            var tail = new StreamGeometry();
+            using (var geometry = tail.Open())
+            {
+                geometry.BeginFigure(new Point(43, 83 + bob), false, false);
+                geometry.BezierTo(new Point(17, 88), new Point(17, 59), new Point(31, 57 + bob), true, false);
+            }
+            tail.Freeze();
+            drawing.DrawGeometry(null, tailOutline, tail);
+            drawing.DrawGeometry(null, tailPen, tail);
+            drawing.DrawEllipse(White, null, new Point(30, 56 + bob), 8, 7);
         }
-        tail.Freeze();
-        drawing.DrawGeometry(null, tailOutline, tail);
-        drawing.DrawGeometry(null, tailPen, tail);
-        drawing.DrawEllipse(White, null, new Point(30, 56 + bob), 8, 7);
+        finally { drawing.Pop(); }
 
         drawing.DrawEllipse(Ink, null, new Point(64, 78 + bob), 30, 32);
         drawing.DrawEllipse(Fur, null, new Point(64, 78 + bob), 27, 29);
-        DrawPolygon(drawing, Ink, [new Point(35, 40 + bob), new Point(40, 16 + bob), new Point(57, 31 + bob)]);
-        DrawPolygon(drawing, Ink, [new Point(71, 31 + bob), new Point(88, 16 + bob), new Point(93, 40 + bob)]);
-        DrawPolygon(drawing, Fur, [new Point(38, 38 + bob), new Point(42, 20 + bob), new Point(56, 32 + bob)]);
-        DrawPolygon(drawing, Fur, [new Point(72, 32 + bob), new Point(86, 20 + bob), new Point(90, 38 + bob)]);
-        DrawPolygon(drawing, InnerEar, [new Point(42, 32 + bob), new Point(43, 23 + bob), new Point(51, 32 + bob)]);
-        DrawPolygon(drawing, InnerEar, [new Point(77, 32 + bob), new Point(85, 23 + bob), new Point(86, 33 + bob)]);
-        drawing.DrawEllipse(Ink, null, new Point(64, 49 + bob), 34, 31);
-        drawing.DrawEllipse(Fur, null, new Point(64, 49 + bob), 31, 28);
-
-        var headphoneArc = new StreamGeometry();
-        using (var geometry = headphoneArc.Open())
+        // Ears, headset, face and whiskers share one head transform. This keeps
+        // the silhouette coherent when the Headliner leans toward a raised paw.
+        drawing.PushTransform(new RotateTransform(headTilt, 64, 49 + bob));
+        try
         {
-            geometry.BeginFigure(new Point(38, 38 + bob), false, false);
-            geometry.BezierTo(new Point(40, 8 + bob), new Point(88, 8 + bob), new Point(91, 38 + bob), true, false);
+            DrawPolygon(drawing, Ink, [new Point(35, 40 + bob), new Point(40, 16 + bob), new Point(57, 31 + bob)]);
+            DrawPolygon(drawing, Ink, [new Point(71, 31 + bob), new Point(88, 16 + bob), new Point(93, 40 + bob)]);
+            DrawPolygon(drawing, Fur, [new Point(38, 38 + bob), new Point(42, 20 + bob), new Point(56, 32 + bob)]);
+            DrawPolygon(drawing, Fur, [new Point(72, 32 + bob), new Point(86, 20 + bob), new Point(90, 38 + bob)]);
+            DrawPolygon(drawing, InnerEar, [new Point(42, 32 + bob), new Point(43, 23 + bob), new Point(51, 32 + bob)]);
+            DrawPolygon(drawing, InnerEar, [new Point(77, 32 + bob), new Point(85, 23 + bob), new Point(86, 33 + bob)]);
+            drawing.DrawEllipse(Ink, null, new Point(64, 49 + bob), 34, 31);
+            drawing.DrawEllipse(Fur, null, new Point(64, 49 + bob), 31, 28);
+
+            var headphoneArc = new StreamGeometry();
+            using (var geometry = headphoneArc.Open())
+            {
+                geometry.BeginFigure(new Point(38, 38 + bob), false, false);
+                geometry.BezierTo(new Point(40, 8 + bob), new Point(88, 8 + bob), new Point(91, 38 + bob), true, false);
+            }
+            headphoneArc.Freeze();
+            drawing.DrawGeometry(null, FrozenPen(Purple, 7), headphoneArc);
+            drawing.DrawRoundedRectangle(InkLight, null, new Rect(27, 37 + bob, 14, 28), 7, 7);
+            drawing.DrawRoundedRectangle(InkLight, null, new Rect(87, 37 + bob, 14, 28), 7, 7);
+            drawing.DrawRoundedRectangle(Purple, null, new Rect(30, 42 + bob, 7, 18), 3.5, 3.5);
+            drawing.DrawRoundedRectangle(Purple, null, new Rect(91, 42 + bob, 7, 18), 3.5, 3.5);
+
+            var stripePen = FrozenPen(FurDark, 3.4);
+            drawing.DrawLine(stripePen, new Point(57, 29 + bob), new Point(60, 37 + bob));
+            drawing.DrawLine(stripePen, new Point(64, 27 + bob), new Point(64, 37 + bob));
+            drawing.DrawLine(stripePen, new Point(71, 29 + bob), new Point(68, 37 + bob));
+
+            DrawCatEye(drawing, 51, 49 + bob, false);
+            DrawCatEye(drawing, 77, 49 + bob, true);
+
+            var whiskerPen = FrozenPen(FrozenBrush(225, 255, 249, 239), 2.1);
+            drawing.DrawLine(whiskerPen, new Point(57, 65 + bob), new Point(41, 62 + bob));
+            drawing.DrawLine(whiskerPen, new Point(56, 69 + bob), new Point(39, 70 + bob));
+            drawing.DrawLine(whiskerPen, new Point(57, 72 + bob), new Point(42, 77 + bob));
+            drawing.DrawLine(whiskerPen, new Point(71, 65 + bob), new Point(87, 62 + bob));
+            drawing.DrawLine(whiskerPen, new Point(72, 69 + bob), new Point(89, 70 + bob));
+            drawing.DrawLine(whiskerPen, new Point(71, 72 + bob), new Point(86, 77 + bob));
+
+            drawing.DrawEllipse(White, null, new Point(58.5, 66.5 + bob), 9.5, 7.5);
+            drawing.DrawEllipse(White, null, new Point(69.5, 66.5 + bob), 9.5, 7.5);
+            drawing.DrawEllipse(White, null, new Point(64, 72 + bob), 7, 4.5);
+            DrawPolygon(drawing, Purple, [new Point(59.5, 61.5 + bob), new Point(68.5, 61.5 + bob), new Point(64, 66 + bob)]);
+            var mouth = new StreamGeometry();
+            using (var geometry = mouth.Open())
+            {
+                geometry.BeginFigure(new Point(64, 66 + bob), false, false);
+                geometry.LineTo(new Point(64, 69 + bob), true, false);
+                geometry.BezierTo(new Point(61, 73 + bob), new Point(57.5, 71 + bob), new Point(57.5, 69.5 + bob), true, false);
+                geometry.BeginFigure(new Point(64, 69 + bob), false, false);
+                geometry.BezierTo(new Point(67, 73 + bob), new Point(70.5, 71 + bob), new Point(70.5, 69.5 + bob), true, false);
+            }
+            mouth.Freeze();
+            drawing.DrawGeometry(null, FrozenPen(Eye, 1.8), mouth);
         }
-        headphoneArc.Freeze();
-        drawing.DrawGeometry(null, FrozenPen(Purple, 7), headphoneArc);
-        drawing.DrawRoundedRectangle(InkLight, null, new Rect(27, 37 + bob, 14, 28), 7, 7);
-        drawing.DrawRoundedRectangle(InkLight, null, new Rect(87, 37 + bob, 14, 28), 7, 7);
-        drawing.DrawRoundedRectangle(Purple, null, new Rect(30, 42 + bob, 7, 18), 3.5, 3.5);
-        drawing.DrawRoundedRectangle(Purple, null, new Rect(91, 42 + bob, 7, 18), 3.5, 3.5);
-
-        var stripePen = FrozenPen(FurDark, 3.4);
-        drawing.DrawLine(stripePen, new Point(57, 29 + bob), new Point(60, 37 + bob));
-        drawing.DrawLine(stripePen, new Point(64, 27 + bob), new Point(64, 37 + bob));
-        drawing.DrawLine(stripePen, new Point(71, 29 + bob), new Point(68, 37 + bob));
-
-        DrawCatEye(drawing, 51, 49 + bob, false);
-        DrawCatEye(drawing, 77, 49 + bob, true);
-
-        var whiskerPen = FrozenPen(FrozenBrush(225, 255, 249, 239), 2.1);
-        drawing.DrawLine(whiskerPen, new Point(57, 65 + bob), new Point(41, 62 + bob));
-        drawing.DrawLine(whiskerPen, new Point(56, 69 + bob), new Point(39, 70 + bob));
-        drawing.DrawLine(whiskerPen, new Point(57, 72 + bob), new Point(42, 77 + bob));
-        drawing.DrawLine(whiskerPen, new Point(71, 65 + bob), new Point(87, 62 + bob));
-        drawing.DrawLine(whiskerPen, new Point(72, 69 + bob), new Point(89, 70 + bob));
-        drawing.DrawLine(whiskerPen, new Point(71, 72 + bob), new Point(86, 77 + bob));
-
-        drawing.DrawEllipse(White, null, new Point(58.5, 66.5 + bob), 9.5, 7.5);
-        drawing.DrawEllipse(White, null, new Point(69.5, 66.5 + bob), 9.5, 7.5);
-        drawing.DrawEllipse(White, null, new Point(64, 72 + bob), 7, 4.5);
-        DrawPolygon(drawing, Purple, [new Point(59.5, 61.5 + bob), new Point(68.5, 61.5 + bob), new Point(64, 66 + bob)]);
-        var mouth = new StreamGeometry();
-        using (var geometry = mouth.Open())
-        {
-            geometry.BeginFigure(new Point(64, 66 + bob), false, false);
-            geometry.LineTo(new Point(64, 69 + bob), true, false);
-            geometry.BezierTo(new Point(61, 73 + bob), new Point(57.5, 71 + bob), new Point(57.5, 69.5 + bob), true, false);
-            geometry.BeginFigure(new Point(64, 69 + bob), false, false);
-            geometry.BezierTo(new Point(67, 73 + bob), new Point(70.5, 71 + bob), new Point(70.5, 69.5 + bob), true, false);
-        }
-        mouth.Freeze();
-        drawing.DrawGeometry(null, FrozenPen(Eye, 1.8), mouth);
+        finally { drawing.Pop(); }
 
         var leftHand = new Point(43 - 12 * leftLift, 89 + bob - 67 * leftLift);
         var rightHand = new Point(85 + 12 * rightLift, 89 + bob - 67 * rightLift);
@@ -218,6 +249,15 @@ public static class ReactiveDjIconRenderer
         drawing.DrawEllipse(FurDark, null, center, 9, 8.5);
         drawing.DrawEllipse(White, null, center, 7.4, 7);
         drawing.DrawEllipse(FrozenBrush(255, 226, 217, 211), null, new Point(center.X, center.Y + 2), 3.7, 2.4);
+    }
+
+    private static double PhaseAngle(int phase) =>
+        Math.Clamp(phase, 0, AudioIconAnimator.PhaseCount - 1) * Math.PI * 2 / AudioIconAnimator.PhaseCount;
+
+    private static double SmoothStep(double low, double high, double value)
+    {
+        var position = Math.Clamp((value - low) / (high - low), 0, 1);
+        return position * position * (3 - 2 * position);
     }
 
     private static void DrawPolygon(DrawingContext drawing, Brush brush, IReadOnlyList<Point> points)

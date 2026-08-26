@@ -35,6 +35,13 @@ internal static class Program
             var frame = AudioIconAnimator.EncodeJump(phase);
             Save(frames[frame], Path.Combine(animationDirectory, $"frame-{phase:D2}.png"));
         }
+        var headlinerDirectory = Path.Combine(outputDirectory, "headliner-animation");
+        Directory.CreateDirectory(headlinerDirectory);
+        for (var phase = 0; phase < AudioIconAnimator.PhaseCount; phase++)
+        {
+            var frame = AudioIconAnimator.Encode(AudioIconAnimator.LevelCount - 1, phase);
+            Save(frames[frame], Path.Combine(headlinerDirectory, $"frame-{phase:D2}.png"));
+        }
 
         const int cell = 148;
         var visual = new DrawingVisual();
@@ -65,9 +72,22 @@ internal static class Program
         var jumpFramesKeepBothPawsRaised = Enumerable.Range(0, AudioIconAnimator.PhaseCount)
             .Select(phase => ReactiveDjIconRenderer.CalculateArmLifts(1, phase, true))
             .All(lifts => lifts.Left == 1 && lifts.Right == 1);
+        var leftHeadlinerPose = ReactiveDjIconRenderer.CalculateArmLifts(1, 0, false);
+        var rightHeadlinerPose = ReactiveDjIconRenderer.CalculateArmLifts(1, AudioIconAnimator.PhaseCount / 2, false);
+        var groundedPawsHoldAndAlternate = leftHeadlinerPose.Left >= .99 && leftHeadlinerPose.Right <= .01 &&
+            rightHeadlinerPose.Left <= .01 && rightHeadlinerPose.Right >= .99;
+        var headFollowsRaisedPaw = ReactiveDjIconRenderer.CalculateHeadTilt(1, 0, false) < -4 &&
+            ReactiveDjIconRenderer.CalculateHeadTilt(1, AudioIconAnimator.PhaseCount / 2, false) > 4;
+        var jumpHeadStaysCentered = Enumerable.Range(0, AudioIconAnimator.PhaseCount)
+            .All(phase => Math.Abs(ReactiveDjIconRenderer.CalculateHeadTilt(1, phase, true)) < .001);
+        var tailAngles = Enumerable.Range(0, AudioIconAnimator.PhaseCount)
+            .Select(phase => ReactiveDjIconRenderer.CalculateTailAngle(1, phase, false))
+            .ToArray();
+        var tailHasRange = tailAngles.Max() - tailAngles.Min() >= 20;
         var passed = frames.Length == AudioIconAnimator.FrameCount &&
             hashes.Distinct().Count() == frames.Length &&
-            jumpFramesNeverUseGroundedGesture && jumpFramesKeepBothPawsRaised;
+            jumpFramesNeverUseGroundedGesture && jumpFramesKeepBothPawsRaised &&
+            groundedPawsHoldAndAlternate && headFollowsRaisedPaw && jumpHeadStaysCentered && tailHasRange;
         Console.WriteLine(JsonSerializer.Serialize(new
         {
             passed,
@@ -75,8 +95,13 @@ internal static class Program
             uniqueFrames = hashes.Distinct().Count(),
             jumpFramesNeverUseGroundedGesture,
             jumpFramesKeepBothPawsRaised,
+            groundedPawsHoldAndAlternate,
+            headFollowsRaisedPaw,
+            jumpHeadStaysCentered,
+            tailHasRange,
             selected,
             contactSheet = contactPath,
+            headlinerAnimation = headlinerDirectory,
             idle = idlePath,
             icon = iconPath
         }));
